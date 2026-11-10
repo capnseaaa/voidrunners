@@ -2,7 +2,7 @@
 import type { TrackDef } from './track';
 
 export const NEON_FRONTIER: TrackDef = {
-  id: 'neon', name: 'NEON FRONTIER', scale: 0.72, yScale: 1, step: 6, checkpoints: 10,
+  id: 'neon', name: 'NEON FRONTIER', scale: 0.94, yScale: 1, step: 6, checkpoints: 10,
   main: [
     [0, 0, 0, 24], [500, 0, 0, 24], [1000, 10, 0, 24], [1400, 30, 150, 22], [1550, 50, 500, 20],
     [1400, 40, 850, 20], [1000, 10, 950, 18], [700, -10, 800, 18], [400, -20, 1000, 20], [100, -30, 1250, 22],
@@ -27,7 +27,7 @@ export const NEON_FRONTIER: TrackDef = {
 };
 
 export const DEAD_ORBIT: TrackDef = {
-  id: 'orbit', name: 'DEAD ORBIT', scale: 0.96, yScale: 1.2, step: 6, checkpoints: 10,
+  id: 'orbit', name: 'DEAD ORBIT', scale: 1.22, yScale: 1.2, step: 6, checkpoints: 10,
   main: [
     [0, 0, 0, 21], [500, 0, 0, 21], [950, 30, -150, 19], [1300, 80, -500, 17], [1250, 120, -950, 17],
     [900, 90, -1250, 17], [450, 40, -1150, 18], [150, 0, -850, 17], [-250, -40, -950, 17], [-600, -80, -1300, 18],
@@ -50,7 +50,7 @@ export const DEAD_ORBIT: TrackDef = {
 };
 
 export const SOLAR_SCAR: TrackDef = {
-  id: 'solar', name: 'SOLAR SCAR', scale: 1.02, yScale: 1, step: 6, checkpoints: 10,
+  id: 'solar', name: 'SOLAR SCAR', scale: 1.28, yScale: 1, step: 6, checkpoints: 10,
   main: [
     [-1100, 10, 900, 24], [-1000, 20, 300, 24], [-600, 30, 20, 24], [0, 30, 0, 27], [700, 30, 0, 29],
     [1400, 30, 100, 29], [1900, 20, 400, 26], [2000, 0, 900, 24], [1700, -20, 1300, 20], [1300, -40, 1200, 17],
@@ -73,7 +73,7 @@ export const SOLAR_SCAR: TrackDef = {
 };
 
 export const WARZONE_ZERO: TrackDef = {
-  id: 'warzone', name: 'WARZONE ZERO', scale: 0.98, yScale: 1.1, step: 6, checkpoints: 10,
+  id: 'warzone', name: 'WARZONE ZERO', scale: 1.2, yScale: 1.1, step: 6, checkpoints: 10,
   main: [
     [0, 0, 0, 28], [700, 20, 0, 28], [1400, 60, -200, 28], [2000, 100, -700, 26], [2100, 60, -1300, 26],
     [1700, 0, -1750, 24], [1100, -40, -1700, 24], [800, -60, -1300, 22], [400, -40, -1500, 22], [0, 0, -1900, 24],

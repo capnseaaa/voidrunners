@@ -142,18 +142,18 @@ export class Ship {
     this.boosting = canAct && c.boost && this.boost > 0 && !this.boostLock;
     if (this.boosting) {
       topMul = 1.3; accMul = 2; thr = 1;
-      if (this.overdriveT <= 0) this.boost -= 24 * dt;
+      if (this.overdriveT <= 0) this.boost -= 27 * dt;
       if (this.boost <= 0) { this.boost = 0; this.boostLock = true; this.boosting = false; }
       if (!wasBoosting) ev.push('boostStart', this.index, this.x, this.y, this.z);
     } else {
-      this.boost = Math.min(100, this.boost + 4.5 * dt);
+      this.boost = Math.min(100, this.boost + 3.6 * dt);
       if (this.boost >= 15) this.boostLock = false;
     }
     if (this.padT > 0) { topMul = Math.max(topMul, 1.26) + (this.boosting ? 0.08 : 0); accMul = Math.max(accMul, 2.8); thr = Math.max(thr, 0.6); }
     if (this.overdriveT > 0) { topMul = Math.max(topMul, 1.3); accMul = Math.max(accMul, 2.4); }
     if (this.bursting) { topMul = 1.58; accMul = 4.4; thr = 1; }
     const top = st.topSpeed * topMul;
-    if (this.phased && this.abilityT > ABILITIES.dash.duration - 0.38) vF = Math.max(vF, st.topSpeed * 1.9);
+    if (this.phased && this.abilityT > ABILITIES.dash.duration - 0.38) vF = Math.max(vF, st.topSpeed * 1.7);
 
     if (thr > 0 && vF < top) {
       const r = vF > 0 ? vF / top : 0;

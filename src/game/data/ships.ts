@@ -67,19 +67,19 @@ export const PLAYER_SHIPS: ShipDef[] = [
     id: 'bruiser', name: 'BRUISER', role: 'HEAVY TANK',
     blurb: 'Surplus gunboat hull with racing engines bolted on as an afterthought. Slow off the line, impossible to push around.',
     model: 'bruiser', colors: { primary: 0xd4302b, secondary: 0x3a3f4a, glow: 0xffb020 }, ability: 'bulwark',
-    stats: { topSpeed: 109, accel: 42, turnRate: 1.38, grip: 6.2, armour: 175, shield: 95, shieldRegen: 8, weaponDamage: 9.5, fireRate: 6.2, missiles: 8, salvageMult: 1, mass: 1.6 },
+    stats: { topSpeed: 113, accel: 42, turnRate: 1.38, grip: 6.2, armour: 175, shield: 95, shieldRegen: 8, weaponDamage: 9.5, fireRate: 6.2, missiles: 8, salvageMult: 1, mass: 1.6 },
   },
   {
     id: 'phantom', name: 'PHANTOM', role: 'AGILITY ACE',
     blurb: 'Experimental phase-drive interceptor. Turns like it is on rails and can step sideways out of the universe when things get crowded.',
     model: 'phantom', colors: { primary: 0x8a3dff, secondary: 0x16142a, glow: 0xff3df0 }, ability: 'dash',
-    stats: { topSpeed: 115, accel: 56, turnRate: 2.15, grip: 8, armour: 85, shield: 55, shieldRegen: 8, weaponDamage: 6, fireRate: 8, missiles: 5, salvageMult: 1, mass: 0.85 },
+    stats: { topSpeed: 117, accel: 56, turnRate: 2.15, grip: 8, armour: 85, shield: 55, shieldRegen: 8, weaponDamage: 6, fireRate: 8, missiles: 5, salvageMult: 1, mass: 0.85 },
   },
   {
     id: 'vulture', name: 'VULTURE', role: 'SALVAGE SPECIALIST',
     blurb: 'A scrapper\'s rig with a wide intake maw and a magnetic collector array. Balanced, dependable and always leaves richer than it arrived.',
     model: 'vulture', colors: { primary: 0x12c8a8, secondary: 0xe8c43a, glow: 0x7dff5a }, ability: 'magnet',
-    stats: { topSpeed: 114, accel: 51, turnRate: 1.7, grip: 6.2, armour: 118, shield: 72, shieldRegen: 8, weaponDamage: 7, fireRate: 6.6, missiles: 6, salvageMult: 1.6, mass: 1.1 },
+    stats: { topSpeed: 116, accel: 51, turnRate: 1.7, grip: 6.2, armour: 118, shield: 72, shieldRegen: 8, weaponDamage: 7, fireRate: 6.6, missiles: 6, salvageMult: 1.6, mass: 1.1 },
   },
 ];
 
@@ -117,19 +117,19 @@ export const AI_RACERS: AiRacerDef[] = [
   {
     id: 'rookie', name: 'ROOKIE', tagline: 'Inexperienced, makes mistakes',
     ship: aiShip('rookie', 'Puddlejumper', 'puddle', { primary: 0xffe040, secondary: 0x3d6bff, glow: 0x9be8ff }, 'burst',
-      { topSpeed: 111, accel: 47, turnRate: 1.55, armour: 105, shield: 60 }),
+      { topSpeed: 113, accel: 47, turnRate: 1.55, armour: 105, shield: 60 }),
     personality: { skill: 0.72, aggression: 0.2, mistakeRate: 4.2, salvageBias: 0.3, shortcutBias: 0.2, riskBias: 0.25, capitalBias: 0.25, boostUse: 0.45 },
   },
   {
     id: 'tank', name: 'TANK', tagline: 'Durable and heavily armed',
     ship: aiShip('tank', 'Ironclad', 'ironclad', { primary: 0x5c6b3a, secondary: 0x2b2f24, glow: 0xff8a20 }, 'bulwark',
-      { topSpeed: 108, accel: 41, turnRate: 1.38, grip: 6.4, armour: 185, shield: 100, weaponDamage: 9.5, missiles: 9, mass: 1.7 }),
+      { topSpeed: 112, accel: 41, turnRate: 1.38, grip: 6.4, armour: 185, shield: 100, weaponDamage: 9.5, missiles: 9, mass: 1.7 }),
     personality: { skill: 0.86, aggression: 0.6, mistakeRate: 0.7, salvageBias: 0.15, shortcutBias: 0.15, riskBias: 0.2, capitalBias: 0.6, boostUse: 0.7 },
   },
   {
     id: 'scavenger', name: 'SCAVENGER', tagline: 'Prioritises salvage',
     ship: aiShip('scavenger', 'Magpie', 'magpie', { primary: 0xb8651e, secondary: 0x2ad0c0, glow: 0x60ffb0 }, 'magnet',
-      { topSpeed: 113, accel: 50, turnRate: 1.72, armour: 112, shield: 70, salvageMult: 1.6, mass: 1.05 }),
+      { topSpeed: 115, accel: 50, turnRate: 1.72, armour: 112, shield: 70, salvageMult: 1.6, mass: 1.05 }),
     personality: { skill: 0.85, aggression: 0.2, mistakeRate: 0.9, salvageBias: 1, shortcutBias: 0.3, riskBias: 0.5, capitalBias: 0.35, boostUse: 0.6 },
   },
   {
@@ -159,7 +159,7 @@ export const AI_RACERS: AiRacerDef[] = [
   {
     id: 'mercenary', name: 'MERCENARY', tagline: 'Prioritises capital ship targets',
     ship: aiShip('mercenary', 'Contract', 'contract', { primary: 0x6a6f7a, secondary: 0xf0a020, glow: 0xffd040 }, 'bulwark',
-      { topSpeed: 112, accel: 49, turnRate: 1.58, armour: 132, shield: 76, weaponDamage: 9, fireRate: 7, missiles: 10, mass: 1.25 }),
+      { topSpeed: 114, accel: 49, turnRate: 1.58, armour: 132, shield: 76, weaponDamage: 9, fireRate: 7, missiles: 10, mass: 1.25 }),
     personality: { skill: 0.88, aggression: 0.35, mistakeRate: 0.6, salvageBias: 0.2, shortcutBias: 0.3, riskBias: 0.3, capitalBias: 1, boostUse: 0.7 },
   },
 ];

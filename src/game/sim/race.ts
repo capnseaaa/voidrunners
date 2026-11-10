@@ -25,6 +25,8 @@ export type Phase = 'grid' | 'racing' | 'done';
 
 export const COUNTDOWN_TIME = 3.6;
 const BOLT_SPEED = 430;
+/** Racer blasters are tuned to chew through capital ship armour; against other racers they sting rather than shred. */
+const SHIP_BOLT_SCALE = 0.3;
 const TARGET_RANGE_SHIP = 300;
 export const TARGET_RANGE_CAP = 520;
 const tmp = new Vector3();
@@ -330,7 +332,7 @@ export class RaceSim {
       const dx = s.x - p.x, dz = s.z - p.z;
       if (dx * dx + dz * dz < (p.r + 1.5) * (p.r + 1.5) && Math.abs(s.y - p.y) < 6) {
         s.padT = 1.5;
-        s.boost = Math.min(100, s.boost + 30); s.boostLock = false;
+        s.boost = Math.min(100, s.boost + 20); s.boostLock = false;
         this.events.push('boostPad', s.index, s.x, s.y, s.z);
         return;
       }
@@ -368,7 +370,7 @@ export class RaceSim {
         if (vn < 0) {
           s.vx -= nx * vn * 1.35; s.vz -= nz * vn * 1.35;
           s.vx *= 0.82; s.vz *= 0.82;
-          this.events.push('wallHit', s.index, o.x + nx * o.r, s.y, o.z + nz * o.r, -vn);
+          this.events.push('wallHit', s.index, o.x + nx * o.r, s.y, o.z + nz * o.r, -vn, -2);
           if (-vn > 24) this.damageShip(s, (-vn - 24) * 0.4, -1, o.x, o.z);
           if (o.maxHp > 0) { o.hp -= -vn * 0.9; if (o.hp <= 0) this.destroyObstacle(o); }
           if (!s.alive) return;
@@ -489,7 +491,7 @@ export class RaceSim {
       p.kind = MISSILE; p.owner = s.index;
       p.x = p.px = s.x + hx * 3; p.y = p.py = s.y - 0.3; p.z = p.pz = s.z + hz * 3;
       p.vx = hx * cp * speed; p.vy = sp * speed; p.vz = hz * cp * speed; p.speed = speed;
-      p.life = 5; p.damage = 44;
+      p.life = 5; p.damage = 32;
       if (this.targetValid(s)) { p.tKind = s.targetKind; p.tIdx = s.targetIdx; } else { p.tKind = 0; p.tIdx = -1; }
       p.color = s.def.colors.glow;
       this.events.push('missile', s.index, p.x, p.y, p.z);
@@ -536,7 +538,7 @@ export class RaceSim {
         if (ddx > 20 || ddx < -20 || ddz > 20 || ddz < -20) continue;
         if (segSphere(p.px, p.py, p.pz, p.x, p.y, p.z, s.x, s.y, s.z, SHIP_RADIUS + pad) >= 0) {
           if (p.kind === MISSILE) this.explodeMissile(p, s, -1);
-          else this.damageShip(s, p.damage, p.owner, p.px, p.pz);
+          else this.damageShip(s, p.kind === BOLT ? p.damage * SHIP_BOLT_SCALE : p.damage, p.owner, p.px, p.pz);
           consumed = true;
         }
       }
@@ -573,7 +575,7 @@ export class RaceSim {
 
   private explodeMissile(p: Projectile, direct: Ship | null, comp: number): void {
     this.events.push('explosion', p.owner, p.x, p.y, p.z, 7, -1, p.color, 'missile');
-    if (comp >= 0) this.capital.damage(this.capital.components[comp], p.damage * 2.2, p.owner, this, p.x, p.y, p.z);
+    if (comp >= 0) this.capital.damage(this.capital.components[comp], p.damage * 3, p.owner, this, p.x, p.y, p.z);
     for (const s of this.ships) {
       if (s.index === p.owner || !s.alive) continue;
       if (s === direct) { this.damageShip(s, p.damage, p.owner, p.px, p.pz); continue; }
@@ -606,7 +608,7 @@ export class RaceSim {
           a.vx -= (jimp / ma) * nx; a.vz -= (jimp / ma) * nz;
           b.vx += (jimp / mb) * nx; b.vz += (jimp / mb) * nz;
           if (this.phase === 'racing') {
-            this.events.push('wallHit', a.index, (a.x + b.x) / 2, a.y, (a.z + b.z) / 2, -rv);
+            this.events.push('wallHit', a.index, (a.x + b.x) / 2, a.y, (a.z + b.z) / 2, -rv, b.index);
             if (-rv > 26) {
               const dmg = (-rv - 26) * 0.3;
               this.damageShip(a, dmg * (mb / ma), b.index, b.x, b.z);

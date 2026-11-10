@@ -31,7 +31,7 @@ export const COMPONENT_KILL_BONUS: Record<ComponentType, number> = { shield: 150
 export const COMPONENT_LABEL: Record<ComponentType, string> = { shield: 'SHIELD GENERATOR', battery: 'WEAPON BATTERY', engine: 'ENGINE', cargo: 'CARGO BAY' };
 export const CAPITAL_NAMES: Record<string, string> = { neon: 'ISV TOLLGATE', orbit: 'HMS GRAVEDIGGER', solar: 'DSS HELIOS WRATH', warzone: 'FLAGSHIP ABSOLUTION' };
 
-const BASE_HP: Record<ComponentType, number> = { shield: 800, battery: 420, engine: 650, cargo: 800 };
+const BASE_HP: Record<ComponentType, number> = { shield: 1100, battery: 600, engine: 950, cargo: 1150 };
 const RADIUS: Record<ComponentType, number> = { shield: 17, battery: 12, engine: 17, cargo: 19 };
 export const HULL_HALF_WIDTH = 48;
 export const HULL_HALF_HEIGHT = 30;
@@ -83,7 +83,7 @@ export class Capital {
     }
     const off = dev + cap.dist;
     this.dirX = dx; this.dirZ = dz; this.nx = nx; this.nz = nz;
-    this.length = len * 0.94;
+    this.length = Math.min(len * 0.94, 1150);
     this.cx = (A.x + B.x) / 2 + nx * off;
     this.cz = (A.z + B.z) / 2 + nz * off;
     this.cy = ySum / cnt + cap.height;

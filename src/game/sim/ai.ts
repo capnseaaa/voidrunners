@@ -2,11 +2,12 @@
 // keyboard does for the player, so AI ships obey identical physics and rules.
 import { ABILITIES, type Personality } from '../data/ships';
 import { clamp, Rng } from '../core/rng';
-import { progInRange, wrapDelta, type Sample } from '../tracks/track';
+import { locateOn, progInRange, wrapDelta, type Sample, type TrackPos } from '../tracks/track';
 import type { RaceSim } from './race';
 import type { Ship } from './ship';
 
 const BRAKE_A = 56;
+const probe: TrackPos = { path: 0, idx: 0, f: 0, d: 0 };
 
 export class AiController {
   readonly ship: Ship;
@@ -25,6 +26,7 @@ export class AiController {
   private reverseT = 0;
   private abilityDelay = 0;
   private t = 0;
+  private lastTotal = -1e9; private noProgT = 0;
   cruise = false; // post-finish cool-down driving
 
   constructor(ship: Ship, pers: Personality, raceSkill: number, seed: number) {
@@ -67,15 +69,21 @@ export class AiController {
         const br = track.paths[b];
         let rel = s.idx - br.fromIdx;
         if (rel > mn / 2) rel -= mn;
-        if (rel >= 0 && rel <= br.forkEnd + 2) { pid = b; idx = rel; }
+        if (rel >= 0 && rel <= br.forkEnd + 2) {
+          // still in the fork overlap: commit only if the ship can actually reach the branch ribbon
+          locateOn(br, s.x, s.z, rel, probe);
+          if (rel <= br.forkEnd * 0.5 || br.samples[probe.idx].hw - Math.abs(probe.d) > 1) { pid = b; idx = probe.idx; }
+          else this.take[b] = false;
+        }
       }
     }
     const v = Math.max(s.fwdSpeed, 18);
     const stepLen = main.step;
     const Ld = 15 + v * 0.4;
-    const N = Math.min(64, Math.ceil(Math.max(Ld * 2, (v * v) / (2 * BRAKE_A) + 36, 236) / stepLen));
-    const cornerK = st.turnRate * 0.9 * (0.78 + 0.27 * this.skill);
-    let vAllow = 1e9, kSum = 0, kN = 0, straight = true;
+    const burstReady = s.ability === 'burst' && s.abilityCd <= 0 && s.abilityT <= 0;
+    const N = Math.min(96, Math.ceil(Math.max(Ld * 2, (v * v) / (2 * BRAKE_A) + 36, burstReady ? 540 : 236) / stepLen));
+    const cornerK = st.turnRate * 0.74 * (0.8 + 0.25 * this.skill);
+    let vAllow = 1e9, kSum = 0, kN = 0, straight = true, longStraight = true;
     let look: Sample | null = null;
     for (let k = 1; k <= N; k++) {
       const path = track.paths[pid];
@@ -95,6 +103,7 @@ export class AiController {
       if (D <= Ld * 2) { kSum += smp.curv; kN++; }
       if (!look && D >= Ld) look = smp;
       if (D < 236 && vs < st.topSpeed * 1.22) straight = false;
+      if (vs < st.topSpeed * 1.5) longStraight = false;
     }
     if (!look) look = track.paths[pid].samples[idx];
 
@@ -220,6 +229,9 @@ export class AiController {
     if (s.stuckT > 1.1 && this.reverseT <= 0 && s.stuckT < 3.6) this.reverseT = 0.9;
     if (this.reverseT > 0) { this.reverseT -= dt; throttle = 0; brake = 1; steer = -steer; }
     if (s.stuckT > 4) { c.reset = true; s.stuckT = 0; }
+    // no forward progress for a while (wedged, spun around): reset to the track
+    if (Math.abs(s.total - this.lastTotal) > 30) { this.lastTotal = s.total; this.noProgT = 0; }
+    else if (race.phase === 'racing') { this.noProgT += dt; if (this.noProgT > 6) { c.reset = true; this.noProgT = 0; } }
 
     c.steer = steer; c.throttle = throttle; c.brake = brake;
     if (cruise) return;
@@ -231,7 +243,7 @@ export class AiController {
 
     // ------------------------------------------------ weapons
     this.hostileT -= dt;
-    if (this.hostileT <= 0) { this.hostileT = rng.range(3, 5); this.hostile = rng.chance(0.06 + p.aggression * 0.92); }
+    if (this.hostileT <= 0) { this.hostileT = rng.range(3, 6); this.hostile = rng.chance(0.03 + p.aggression * 0.5); }
     const cz = race.capital;
     const inZone = !cz.destroyed && progInRange(s.prog, cz.zoneFrom, cz.zoneTo, track.length);
     if (inZone && !this.wasInZone) this.engage = rng.chance(0.28 + 0.72 * p.capitalBias);
@@ -242,7 +254,7 @@ export class AiController {
       const tgt = race.ships[s.targetIdx];
       const dist = Math.hypot(tgt.x - s.x, tgt.z - s.z);
       c.fire = this.hostile && !this.holdFire;
-      if (this.hostile && s.missiles > reserve && dist < 250 && dist > 25 && rng.chance(dt * 0.4 * p.aggression)) c.missile = true;
+      if (this.hostile && s.missiles > reserve && dist < 250 && dist > 25 && rng.chance(dt * 0.22 * p.aggression)) c.missile = true;
     } else if (s.targetKind === 2) {
       c.fire = this.engage && !this.holdFire;
       if (this.engage && s.missiles > 0 && rng.chance(dt * (0.2 + 0.7 * p.capitalBias))) c.missile = true;
@@ -252,7 +264,7 @@ export class AiController {
     if (s.abilityCd <= 0 && s.abilityT <= 0) {
       let useIt = false;
       switch (s.ability) {
-        case 'burst': useIt = straight && s.fwdSpeed > st.topSpeed * 0.7; break;
+        case 'burst': useIt = longStraight && s.fwdSpeed > st.topSpeed * 0.7 && !avoiding; break;
         case 'bulwark': useIt = (s.lastHitT < 0.4 && (s.shield < st.shield * 0.5 || s.hp < st.armour * 0.6)) || s.threatT > 0; break;
         case 'dash': useIt = s.threatT > 0 || (blocker !== null && straight) || (s.lastHitT < 0.3 && s.shield <= 0) || (straight && s.fwdSpeed > st.topSpeed * 0.8); break;
         case 'magnet': {
