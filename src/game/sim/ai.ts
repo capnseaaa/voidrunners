@@ -13,6 +13,7 @@ export class AiController {
   readonly ship: Ship;
   readonly pers: Personality;
   readonly skill: number; // effective 0..1
+  private readonly raceSkill: number;
   private readonly rng: Rng;
   private readonly take: boolean[] = [];
   private readonly decidedLap: number[] = [];
@@ -32,6 +33,7 @@ export class AiController {
   constructor(ship: Ship, pers: Personality, raceSkill: number, seed: number) {
     this.ship = ship; this.pers = pers;
     this.skill = clamp(pers.skill * raceSkill, 0.3, 1);
+    this.raceSkill = raceSkill;
     this.rng = new Rng(seed);
     this.lane = this.rng.range(-1, 1);
     ship.preferRacers = pers.aggression > 0.8;
@@ -243,7 +245,7 @@ export class AiController {
 
     // ------------------------------------------------ weapons
     this.hostileT -= dt;
-    if (this.hostileT <= 0) { this.hostileT = rng.range(3, 6); this.hostile = rng.chance(0.09 + p.aggression * 0.45); }
+    if (this.hostileT <= 0) { this.hostileT = rng.range(3, 6); this.hostile = rng.chance((0.09 + p.aggression * 0.45) * (0.45 + 0.55 * this.raceSkill)); }
     const cz = race.capital;
     const inZone = !cz.destroyed && progInRange(s.prog, cz.zoneFrom, cz.zoneTo, track.length);
     if (inZone && !this.wasInZone) {

@@ -251,7 +251,7 @@ export class Capital {
         for (const s of race.ships) {
           if (!s.alive) continue;
           const dist = Math.hypot(s.x - st.x, s.z - st.z);
-          if (dist < st.r + 2 && Math.abs(s.y - st.y) < 10) race.damageShip(s, 30 * (1 - 0.5 * dist / (st.r + 2)), -1, st.x, st.z);
+          if (dist < st.r + 2 && Math.abs(s.y - st.y) < 10) race.damageShip(s, 26 * (1 - 0.5 * dist / (st.r + 2)), -1, st.x, st.z);
         }
       }
     }

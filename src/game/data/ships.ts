@@ -61,7 +61,7 @@ export const PLAYER_SHIPS: ShipDef[] = [
     id: 'comet', name: 'COMET', role: 'SPEED SPECIALIST',
     blurb: 'A needle of chrome strapped to an oversized fusion torch. Fastest thing on the circuit, and about as sturdy as a soda can.',
     model: 'comet', colors: { primary: 0xff7a1a, secondary: 0xf2f2f5, glow: 0x35d8ff }, ability: 'burst',
-    stats: { topSpeed: 124, accel: 64, turnRate: 1.6, grip: 5.2, armour: 80, shield: 50, shieldRegen: 7, weaponDamage: 6, fireRate: 7, missiles: 4, salvageMult: 1, mass: 0.8 },
+    stats: { topSpeed: 124, accel: 64, turnRate: 1.6, grip: 5.2, armour: 90, shield: 60, shieldRegen: 7, weaponDamage: 6, fireRate: 7, missiles: 4, salvageMult: 1, mass: 0.8 },
   },
   {
     id: 'bruiser', name: 'BRUISER', role: 'HEAVY TANK',

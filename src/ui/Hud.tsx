@@ -139,8 +139,9 @@ export function Countdown() {
   if (!hud) return null;
   if (hud.phase === 'grid') {
     const n = Math.ceil(hud.countdown);
-    if (n > 3) return <div className="count"><span key="r" style={{ fontSize: 'clamp(40px, 9vh, 90px)' }}>GET READY</span></div>;
-    return <div className="count"><span key={n}>{n}</span></div>;
+    const hint = <div className="hint"><kbd>W</kbd> accelerate <kbd>A</kbd><kbd>D</kbd> steer <kbd>Space</kbd> fire <kbd>Shift</kbd> missile <kbd>E</kbd> boost <kbd>Q</kbd> ability <kbd>Esc</kbd> pause</div>;
+    if (n > 3) return <div className="count"><span key="r" style={{ fontSize: 'clamp(40px, 9vh, 90px)' }}>GET READY</span>{hint}</div>;
+    return <div className="count"><span key={n}>{n}</span>{hint}</div>;
   }
   if (hud.phase === 'racing' && hud.time < 1.1) return <div className="count"><span key="go" className="go">GO!</span></div>;
   return null;

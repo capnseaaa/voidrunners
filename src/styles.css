@@ -198,6 +198,8 @@ kbd { font-family: var(--mono); font-size: 12px; padding: 2px 8px; border: 1px s
 .hud .fps { position: absolute; right: 16px; bottom: 150px; color: var(--dim); font-size: 10px; }
 .count { position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; pointer-events: none; z-index: 12; }
 .count span { font-family: var(--display); font-weight: 900; font-style: italic; font-size: clamp(90px, 26vh, 240px); color: #fff; text-shadow: 0 0 40px var(--mag), 8px 8px 0 rgba(0,229,255,0.5); animation: cnt 0.9s ease-out; }
+.count .hint { position: absolute; bottom: 24%; left: 0; right: 0; text-align: center; font-size: 13px; color: var(--text); text-shadow: 0 0 6px #000; letter-spacing: 0.06em; }
+.count .hint kbd { margin: 0 4px 0 12px; background: rgba(5,2,15,0.7); }
 .count span.go { color: var(--green); text-shadow: 0 0 50px var(--green), 8px 8px 0 rgba(255,225,74,0.5); }
 @keyframes cnt { from { transform: scale(2.4); opacity: 0; } 30% { opacity: 1; } to { transform: scale(1); } }
 .results .panel { width: min(1040px, 96vw); }

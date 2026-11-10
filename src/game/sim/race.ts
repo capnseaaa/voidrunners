@@ -26,7 +26,7 @@ export type Phase = 'grid' | 'racing' | 'done';
 export const COUNTDOWN_TIME = 3.6;
 const BOLT_SPEED = 430;
 /** Racer blasters are tuned to chew through capital ship armour; against other racers they sting rather than shred. */
-const SHIP_BOLT_SCALE = 0.3;
+const SHIP_BOLT_SCALE = 0.26;
 const TARGET_RANGE_SHIP = 300;
 export const TARGET_RANGE_CAP = 520;
 const tmp = new Vector3();
@@ -357,7 +357,7 @@ export class RaceSim {
       if (o.kind === 'mine') {
         if (dist < o.r + SHIP_RADIUS + 2.4) {
           this.destroyObstacle(o);
-          this.damageShip(s, 32, -1, o.x, o.z);
+          this.damageShip(s, 28, -1, o.x, o.z);
           s.vx *= 0.7; s.vz *= 0.7;
           if (!s.alive) return;
         }
@@ -372,7 +372,7 @@ export class RaceSim {
           s.vx -= nx * vn * 1.35; s.vz -= nz * vn * 1.35;
           s.vx *= 0.82; s.vz *= 0.82;
           this.events.push('wallHit', s.index, o.x + nx * o.r, s.y, o.z + nz * o.r, -vn, -2);
-          if (-vn > 24) this.damageShip(s, (-vn - 24) * 0.4, -1, o.x, o.z);
+          if (-vn > 24) this.damageShip(s, (-vn - 24) * 0.28, -1, o.x, o.z);
           if (o.maxHp > 0) { o.hp -= -vn * 0.9; if (o.hp <= 0) this.destroyObstacle(o); }
           if (!s.alive) return;
         }
@@ -492,7 +492,7 @@ export class RaceSim {
       p.kind = MISSILE; p.owner = s.index;
       p.x = p.px = s.x + hx * 3; p.y = p.py = s.y - 0.3; p.z = p.pz = s.z + hz * 3;
       p.vx = hx * cp * speed; p.vy = sp * speed; p.vz = hz * cp * speed; p.speed = speed;
-      p.life = 5; p.damage = 32;
+      p.life = 5; p.damage = 30;
       if (this.targetValid(s)) { p.tKind = s.targetKind; p.tIdx = s.targetIdx; } else { p.tKind = 0; p.tIdx = -1; }
       p.color = s.def.colors.glow;
       this.events.push('missile', s.index, p.x, p.y, p.z);
