@@ -151,7 +151,7 @@ kbd { font-family: var(--mono); font-size: 12px; padding: 2px 8px; border: 1px s
 .hud .lapline { font-family: var(--display); font-size: 16px; margin-top: 6px; color: var(--cyan); }
 .hud .timeline { font-size: 13px; margin-top: 2px; display: grid; grid-template-columns: auto 1fr; gap: 0 10px; }
 .hud .timeline span:nth-child(odd) { color: var(--dim); }
-.hud .boss { top: 12px; left: 50%; transform: translateX(-50%); width: min(520px, 46vw); text-align: center; }
+.hud .boss { top: 12px; left: 50%; transform: translateX(-50%); width: clamp(220px, calc(100vw - 460px), 520px); text-align: center; }
 .hud .boss .nm { font-family: var(--display); font-size: 13px; letter-spacing: 0.2em; color: var(--red); display: flex; justify-content: space-between; }
 .hud .bossbar { height: 13px; margin: 5px 0 7px; border: 1px solid var(--red); background: rgba(255,61,90,0.12); position: relative; transform: skewX(-18deg); overflow: hidden; }
 .hud .bossbar i { position: absolute; inset: 0 auto 0 0; background: linear-gradient(90deg, #ff3d5a, #ff9a2a); box-shadow: 0 0 12px #ff3d5a; transition: width 0.2s; }
@@ -197,7 +197,7 @@ kbd { font-family: var(--mono); font-size: 12px; padding: 2px 8px; border: 1px s
 .hud .flash { position: absolute; inset: 0; box-shadow: inset 0 0 120px 30px rgba(255, 40, 60, 0.75); }
 .hud .fps { position: absolute; right: 16px; bottom: 150px; color: var(--dim); font-size: 10px; }
 .count { position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; pointer-events: none; z-index: 12; }
-.count span { font-family: var(--display); font-weight: 900; font-style: italic; font-size: clamp(90px, 26vh, 240px); color: #fff; text-shadow: 0 0 40px var(--mag), 8px 8px 0 rgba(0,229,255,0.5); animation: cnt 0.9s ease-out; }
+.count span { font-family: var(--display); font-weight: 900; font-style: italic; font-size: clamp(64px, 17vh, 170px); color: #fff; text-shadow: 0 0 40px var(--mag), 8px 8px 0 rgba(0,229,255,0.5); animation: cnt 0.9s ease-out; }
 .count .hint { position: absolute; bottom: 24%; left: 0; right: 0; text-align: center; font-size: 13px; color: var(--text); text-shadow: 0 0 6px #000; letter-spacing: 0.06em; }
 .count .hint kbd { margin: 0 4px 0 12px; background: rgba(5,2,15,0.7); }
 .count span.go { color: var(--green); text-shadow: 0 0 50px var(--green), 8px 8px 0 rgba(255,225,74,0.5); }
@@ -219,7 +219,7 @@ kbd { font-family: var(--mono); font-size: 12px; padding: 2px 8px; border: 1px s
   .preview { min-height: 300px; }
   .stages { grid-template-columns: 1fr; }
   .hud .tr .stand { display: none; }
-  .hud .boss { width: 60vw; } .hud .comp { font-size: 0; padding: 2px; }
+  .hud .comp { font-size: 0; padding: 2px; }
 }
 @media (max-height: 640px) {
   .hud .pos { font-size: 38px; } .hud .speed { font-size: 40px; } .hud .tr .stand { display: none; }

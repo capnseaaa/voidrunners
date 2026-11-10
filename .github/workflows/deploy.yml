@@ -29,15 +29,17 @@ jobs:
           node-version: 22
           cache: npm
 
-      - name: Configure Pages
-        id: pages
-        uses: actions/configure-pages@v5
-
       - name: Install dependencies
         run: npm ci
 
       - name: Test
         run: npm test
+
+      # Fails with "Get Pages site failed" until Pages is enabled:
+      # Settings -> Pages -> Build and deployment -> Source: GitHub Actions.
+      - name: Configure Pages
+        id: pages
+        uses: actions/configure-pages@v5
 
       - name: Build
         # base_path is "/<repo>" for project pages and "" for user/organisation pages,
