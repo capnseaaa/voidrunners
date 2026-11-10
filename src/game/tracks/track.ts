@@ -257,16 +257,22 @@ export function locateOn(path: TrackPath, x: number, z: number, hint: number, ou
   const ss = path.samples, n = ss.length, step = path.step;
   let i = wrapIdx(path, hint);
   let along = 0;
-  for (let iter = 0; iter < 40; iter++) {
+  // Walk toward the containing segment. The walk never reverses direction: on the
+  // inside of a bend adjacent frames can disagree by a hair, which would ping-pong.
+  let moved = 0;
+  for (let iter = 0; iter < 60; iter++) {
     const s = ss[i];
     along = (x - s.x) * s.hx + (z - s.z) * s.hz;
-    if (along > step) {
+    if (along > step && moved >= 0) {
       if (!path.closed && i >= n - 1) break;
       i = path.closed ? (i + 1) % n : i + 1;
-    } else if (along < 0) {
+      moved = 1;
+    } else if (along < 0 && moved <= 0) {
       if (!path.closed && i <= 0) break;
       i = path.closed ? (i - 1 + n) % n : i - 1;
+      moved = -1;
     } else break;
+    if (iter === 59) { const e = ss[i]; along = (x - e.x) * e.hx + (z - e.z) * e.hz; }
   }
   const s = ss[i];
   let over = 0;

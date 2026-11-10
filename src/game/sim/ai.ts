@@ -20,7 +20,7 @@ export class AiController {
   private dT = 0;
   private mistakeT = 0; private mistakeKind = 0; private mistakeRoll = 0;
   private hostile = false; private hostileT = 0;
-  private engage = false; private wasInZone = false;
+  private engage = false; private wasInZone = false; private engagedOnce = false;
   private boostOn = false;
   private holdFire = false;
   private reverseT = 0;
@@ -243,10 +243,14 @@ export class AiController {
 
     // ------------------------------------------------ weapons
     this.hostileT -= dt;
-    if (this.hostileT <= 0) { this.hostileT = rng.range(3, 6); this.hostile = rng.chance(0.03 + p.aggression * 0.5); }
+    if (this.hostileT <= 0) { this.hostileT = rng.range(3, 6); this.hostile = rng.chance(0.09 + p.aggression * 0.45); }
     const cz = race.capital;
     const inZone = !cz.destroyed && progInRange(s.prog, cz.zoneFrom, cz.zoneTo, track.length);
-    if (inZone && !this.wasInZone) this.engage = rng.chance(0.28 + 0.72 * p.capitalBias);
+    if (inZone && !this.wasInZone) {
+      // everyone takes at least one run at the capital ship; specialists engage on every pass
+      this.engage = rng.chance(0.35 + 0.65 * p.capitalBias) || (s.lap >= race.laps - 1 && !this.engagedOnce);
+      if (this.engage) this.engagedOnce = true;
+    }
     this.wasInZone = inZone;
     if (s.heat > 86) this.holdFire = true; else if (s.heat < 32) this.holdFire = false;
     const reserve = p.capitalBias > 0.5 && !cz.destroyed ? Math.ceil(st.missiles * 0.5) : 0;
