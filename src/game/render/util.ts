@@ -88,7 +88,7 @@ export function plate(points: number[][], thickness: number): BufferGeometry {
 export function rockGeometry(seed: number, detail = 1, rough = 0.35): BufferGeometry {
   const rng = new Rng(seed);
   const base = new IcosahedronGeometry(1, detail);
-  const g = base.toNonIndexed();
+  const g = base.index ? base.toNonIndexed() : base.clone();
   base.dispose();
   const p = g.attributes.position;
   const cache = new Map<string, number>();

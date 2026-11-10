@@ -70,7 +70,7 @@ export class RaceRenderer {
     this.renderer = new WebGLRenderer({ canvas, antialias: quality !== 'low', powerPreference: 'high-performance' });
     this.renderer.outputColorSpace = SRGBColorSpace;
     this.renderer.toneMapping = ACESFilmicToneMapping;
-    this.renderer.toneMappingExposure = 1.12;
+    this.renderer.toneMappingExposure = 1.0;
     this.renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, quality === 'high' ? 2 : quality === 'medium' ? 1.25 : 1));
     this.camera = new PerspectiveCamera(70, 1, 0.5, 20000);
     this.scene.fog = new FogExp2(theme.fog, theme.fogDensity);
@@ -183,7 +183,7 @@ export class RaceRenderer {
     if (quality !== 'low') {
       this.composer = new EffectComposer(this.renderer);
       this.composer.addPass(new RenderPass(this.scene, this.camera));
-      this.bloom = new UnrealBloomPass(new Vector2(256, 256), quality === 'high' ? 0.62 : 0.55, 0.55, 0.9);
+      this.bloom = new UnrealBloomPass(new Vector2(256, 256), quality === 'high' ? 0.42 : 0.38, 0.5, 0.92);
       this.composer.addPass(this.bloom);
       this.composer.addPass(new OutputPass());
     }
@@ -220,7 +220,7 @@ export class RaceRenderer {
     const rt = pmrem.fromScene(envScene, 0.03);
     this.envTex = rt.texture;
     this.scene.environment = this.envTex;
-    this.scene.environmentIntensity = 0.9;
+    this.scene.environmentIntensity = 0.7;
     pmrem.dispose();
     skyTex.dispose(); dome.geometry.dispose(); (dome.material as Material).dispose(); pg.dispose(); pmats.forEach((m) => m.dispose());
     this.disposables.push(rt);
@@ -396,8 +396,8 @@ export class RaceRenderer {
       const hot = s.bursting ? 2.4 : s.boosting || s.overdriveT > 0 ? 1.5 : s.padT > 0 ? 1.1 : 0;
       const thrust = clamp(0.25 + speedFrac * 0.9 + hot + (s.ctl.throttle > 0 ? 0.25 : 0), 0.15, 4.4);
       const flick = 0.9 + Math.sin(time * 47 + s.index) * 0.1;
-      for (const f of sv.model.flames) f.scale.z = thrust * 2.2 * flick;
-      for (const sp of sv.model.sprites) sp.scale.setScalar(sv.model.engineR * (3.5 + thrust * 2.2) * flick);
+      for (const f of sv.model.flames) f.scale.z = thrust * 1.7 * flick;
+      for (const sp of sv.model.sprites) sp.scale.setScalar(sv.model.engineR * (1.9 + thrust * 0.85) * flick);
       // engine trail
       if (speedFrac > 0.2 && Math.hypot(s.x - cam.position.x, s.z - cam.position.z) < 500) {
         sv.trailT -= dt;
@@ -407,7 +407,7 @@ export class RaceRenderer {
           const hx = Math.sin(s.yaw), hz = Math.cos(s.yaw);
           for (const en of sv.model.engines) {
             const wx = s.x + hx * en.z + hz * en.x, wz = s.z + hz * en.z - hx * en.x;
-            fx.particles.emit(wx, s.y + en.y + bob, wz, -hx * 8 + s.vx * 0.15, 0, -hz * 8 + s.vz * 0.15, c.r, c.g, c.b, sv.model.engineR * (2 + hot * 1.2), 0, 0.22 + hot * 0.12, 0);
+            fx.particles.emit(wx, s.y + en.y + bob, wz, -hx * 8 + s.vx * 0.15, 0, -hz * 8 + s.vz * 0.15, c.r * 0.5, c.g * 0.5, c.b * 0.5, sv.model.engineR * (1.0 + hot * 0.6), 0, 0.2 + hot * 0.14, 0);
           }
         }
       }
@@ -476,7 +476,7 @@ export class RaceRenderer {
       const sc = PICKUP_SCALE[p.kind] * (1 + Math.sin(time * 4 + i) * 0.12);
       m4.compose(v3.set(p.x, p.y + Math.sin(time * 2.4 + i * 0.7) * 0.35, p.z), q.setFromEuler(e.set(0, time * 2.2 + i, 0.5)), s3.set(sc * 0.8, sc * 1.25, sc * 0.8));
       this.pickups.setMatrixAt(np, m4);
-      this.pickups.setColorAt(np, col.set(PICKUP_COLOR[p.kind]).multiplyScalar(1.5));
+      this.pickups.setColorAt(np, col.set(PICKUP_COLOR[p.kind]).multiplyScalar(1.1));
       np++;
     }
     this.pickups.count = np;
@@ -560,7 +560,7 @@ export class RaceRenderer {
     const s = this.sim.player, cam = this.camera, sim = this.sim;
     const st = s.stats;
     const speedFrac = clamp(s.fwdSpeed / st.topSpeed, 0, 1.7);
-    let back = 12.5 + speedFrac * 3.2, height = 4.5, lookAhead = 16, yawOff = 0;
+    let back = 13.2 + speedFrac * 3.2, height = 5.7, lookAhead = 15, yawOff = 0;
     if (sim.phase === 'grid') {
       // opening sweep around the grid
       const k = clamp(sim.countdown / COUNTDOWN_TIME, 0, 1);

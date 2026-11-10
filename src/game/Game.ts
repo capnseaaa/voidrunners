@@ -100,7 +100,8 @@ export class Game {
     const loop = (now: number) => {
       if (!this.running) return;
       this.raf = requestAnimationFrame(loop);
-      const real = Math.min(0.1, (now - this.last) / 1000);
+      // rAF timestamps can predate start() after a long synchronous scene build: never step backwards
+      const real = Math.max(0, Math.min(0.1, (now - this.last) / 1000));
       this.last = now;
       if (this.paused) return;
       this.frame(real);
@@ -123,6 +124,7 @@ export class Game {
   /** Advance the game by a real-time delta (exposed for automated tests). */
   frame(real: number): void {
     const sim = this.sim;
+    if (!(real > 0)) return;
     const dt = real * this.timeScale;
     this.fpsAcc += real; this.fpsN++;
     if (this.fpsAcc > 0.5) { this.fps = this.fpsN / this.fpsAcc; this.fpsAcc = 0; this.fpsN = 0; }

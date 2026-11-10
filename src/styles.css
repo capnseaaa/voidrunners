@@ -1,5 +1,5 @@
 :root {
-  --bg: #05020f; --panel: rgba(10, 8, 30, 0.82); --line: rgba(0, 229, 255, 0.35);
+  --bg: #05020f; --panel: rgba(10, 8, 30, 0.9); --line: rgba(0, 229, 255, 0.35);
   --cyan: #00e5ff; --mag: #ff2bd6; --orange: #ff7a1a; --purple: #8a3dff; --teal: #12c8a8; --yellow: #ffe14a; --red: #ff3d5a; --green: #7dff5a;
   --text: #e6f4ff; --dim: #8fa3c8;
   --display: "Orbitron", "Eurostile Extended", "Eurostile", "Bank Gothic", "Agency FB", "Arial Black", "Segoe UI", sans-serif;
@@ -31,6 +31,7 @@ h1, h2, h3 { font-family: var(--display); margin: 0; letter-spacing: 0.08em; tex
 
 /* ---------- common ---------- */
 .screen { position: absolute; inset: 0; display: flex; flex-direction: column; padding: clamp(12px, 2.4vh, 28px) clamp(14px, 3vw, 44px); z-index: 2; }
+.screen:not(.title)::before { content: ""; position: absolute; inset: 0; background: rgba(5, 2, 15, 0.62); z-index: -1; }
 .topbar { display: flex; align-items: center; gap: 18px; margin-bottom: clamp(8px, 1.6vh, 18px); }
 .topbar h2 { font-size: clamp(20px, 3.2vh, 34px); font-style: italic; color: var(--cyan); text-shadow: 0 0 14px rgba(0,229,255,0.7), 3px 3px 0 rgba(255,43,214,0.55); }
 .spacer { flex: 1; }

@@ -3,7 +3,7 @@
 // gates, the start/finish line, boost pads and route signs.
 import {
   AdditiveBlending, BoxGeometry, BufferAttribute, BufferGeometry, Color, DoubleSide, Group, InstancedMesh, Matrix4, Mesh, MeshBasicMaterial,
-  MeshStandardMaterial, PlaneGeometry, Quaternion, Texture, Vector3,
+  MeshStandardMaterial, PlaneGeometry, Quaternion, Texture, Vector3, Euler,
 } from 'three';
 import type { Layout } from '../sim/layout';
 import { frameAt, idxAtS, insidePath, newFrame, type Track, type TrackPath } from '../tracks/track';
@@ -77,10 +77,10 @@ export function buildTrackVisual(track: Track, layout: Layout, theme: Theme, glo
   const disposables: { dispose(): void }[] = [];
   const tex = roadTextures(theme);
   disposables.push(tex.map, tex.emissive);
-  const roadMat = new MeshStandardMaterial({ map: tex.map, emissiveMap: tex.emissive, emissive: 0xffffff, emissiveIntensity: 1.5, metalness: 0.55, roughness: 0.42, side: DoubleSide });
-  const wallMat = new MeshStandardMaterial({ color: 0x1a1d2c, metalness: 0.7, roughness: 0.4, side: DoubleSide });
-  const railL = new MeshBasicMaterial({ color: new Color(theme.rail).multiplyScalar(1.5) });
-  const railR = new MeshBasicMaterial({ color: new Color(theme.railAlt).multiplyScalar(1.5) });
+  const roadMat = new MeshStandardMaterial({ map: tex.map, emissiveMap: tex.emissive, emissive: 0xffffff, emissiveIntensity: 1.0, metalness: 0.3, roughness: 0.55, envMapIntensity: 0.22, side: DoubleSide });
+  const wallMat = new MeshStandardMaterial({ color: 0x1a1d2c, metalness: 0.6, roughness: 0.45, envMapIntensity: 0.35, side: DoubleSide });
+  const railL = new MeshBasicMaterial({ color: new Color(theme.rail).multiplyScalar(1.05) });
+  const railR = new MeshBasicMaterial({ color: new Color(theme.railAlt).multiplyScalar(1.05) });
   disposables.push(roadMat, wallMat, railL, railR);
 
   for (const path of track.paths) {
@@ -155,12 +155,12 @@ export function buildTrackVisual(track: Track, layout: Layout, theme: Theme, glo
     let total = 0;
     for (const p of track.paths) total += Math.ceil(p.samples.length / every);
     const ribs = new InstancedMesh(ribGeo, ribMat, total);
-    const m = new Matrix4(), q = new Quaternion(), v = new Vector3(), sc = new Vector3(), zAxis = new Vector3(0, 0, 1), dir = new Vector3();
+    const m = new Matrix4(), q = new Quaternion(), v = new Vector3(), sc = new Vector3(), eu = new Euler(0, 0, 0, 'YXZ');
     let c = 0;
     for (const p of track.paths) for (let i = 0; i < p.samples.length; i += every) {
       const s = p.samples[i];
-      dir.set(s.tx, s.ty, s.tz);
-      q.setFromUnitVectors(zAxis, dir);
+      // yaw then pitch, so the rib always stays level across the road
+      q.setFromEuler(eu.set(-Math.asin(Math.max(-1, Math.min(1, s.ty))), Math.atan2(s.hx, s.hz), 0));
       m.compose(v.set(s.x, s.y - 0.5, s.z), q, sc.set(s.hw * 2 + 2.6, 1, 1));
       ribs.setMatrixAt(c++, m);
     }

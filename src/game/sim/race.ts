@@ -95,6 +95,7 @@ export class RaceSim {
 
   // ------------------------------------------------------------------ step
   step(dt: number): void {
+    if (!(dt > 0)) return;
     this.tick++;
     if (this.phase === 'grid') {
       const before = Math.ceil(this.countdown);

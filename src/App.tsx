@@ -11,7 +11,13 @@ interface RaceCtx { race: RaceDef; nonce: number }
 export function App() {
   const [save, setSaveState] = useState<SaveData>(() => loadSave());
   const [screen, setScreen] = useState<Screen>('title');
-  const [raceCtx, setRaceCtx] = useState<RaceCtx | null>(null);
+  const [raceCtx, setRaceCtx] = useState<RaceCtx | null>(() => {
+    // developer shortcut: ?dev&race=s3r1 jumps straight into a race (see README)
+    if (typeof location === 'undefined') return null;
+    const q = new URLSearchParams(location.search);
+    const r = q.has('dev') ? RACES.find((x) => x.id === q.get('race')) : undefined;
+    return r ? { race: r, nonce: 1 } : null;
+  });
   const [lastRace, setLastRace] = useState<string | undefined>(undefined);
   const saveRef = useRef(save);
   saveRef.current = save;

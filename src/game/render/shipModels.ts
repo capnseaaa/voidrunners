@@ -42,7 +42,7 @@ function fin(k: Kit, mat: string, pts: number[][], x: number, y: number, cant = 
 function engine(c: Ctx, x: number, y: number, r: number, len: number, z: number, mat = 'dark'): void {
   c.kit.add(mat, zCyl(r * 0.92, r, len, 14), x, y, z + len / 2);
   c.kit.add('chrome', zCyl(r * 1.08, r * 1.02, len * 0.22, 14), x, y, z + len * 0.1);
-  c.kit.add('glow', zCyl(r * 0.78, r * 0.78, 0.06, 14), x, y, z - 0.02);
+  c.kit.add('glow', zCyl(r * 0.6, r * 0.6, 0.06, 14), x, y, z + 0.12);
   c.engines.push([x, y, r]);
   c.engineZ = Math.min(c.engineZ, z);
 }
@@ -269,7 +269,7 @@ export function buildShipModel(def: ShipDef, glowTex: Texture): ShipModel {
     chrome: new MeshStandardMaterial({ color: 0xe8ecf4, metalness: 1, roughness: 0.12 }),
     dark: new MeshStandardMaterial({ color: 0x16161d, metalness: 0.7, roughness: 0.5 }),
     canopy: new MeshStandardMaterial({ color: 0x0a1626, metalness: 0.9, roughness: 0.08, emissive: new Color(col.glow).multiplyScalar(0.12) }),
-    glow: new MeshBasicMaterial({ color: new Color(col.glow).multiplyScalar(1.6) }),
+    glow: new MeshBasicMaterial({ color: new Color(col.glow).multiplyScalar(1.25) }),
   };
   const ctx: Ctx = { kit: new Kit(), engines: [], engineZ: 0 };
   (BUILDERS[def.model] ?? BUILDERS.oldguard)(ctx);
@@ -277,9 +277,9 @@ export function buildShipModel(def: ShipDef, glowTex: Texture): ShipModel {
   const group = new Group();
   group.add(body);
 
-  const flameMat = new MeshBasicMaterial({ color: col.glow, transparent: true, opacity: 0.8, blending: AdditiveBlending, depthWrite: false });
+  const flameMat = new MeshBasicMaterial({ color: col.glow, transparent: true, opacity: 0.6, blending: AdditiveBlending, depthWrite: false });
   const coreMat = new MeshBasicMaterial({ color: 0xffffff, transparent: true, opacity: 0.85, blending: AdditiveBlending, depthWrite: false });
-  const spriteMat = new SpriteMaterial({ map: glowTex, color: col.glow, blending: AdditiveBlending, depthWrite: false, transparent: true });
+  const spriteMat = new SpriteMaterial({ map: glowTex, color: col.glow, blending: AdditiveBlending, depthWrite: false, transparent: true, opacity: 0.4 });
   const flames: Mesh[] = [];
   const sprites: Sprite[] = [];
   const engines: Vector3[] = [];
