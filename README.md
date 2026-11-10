@@ -46,10 +46,9 @@ npm run preview    # serve the production build locally
 
 The repository includes `.github/workflows/deploy.yml`. It installs dependencies, runs the tests, builds the site and publishes `dist/` to GitHub Pages.
 
-1. Push the code to the repository's default branch (`main` or `master`). The workflow only runs on those branches or when started by hand.
-2. In the repository on GitHub open **Settings → Pages**. Under **Build and deployment** set **Source** to **GitHub Actions**. This is a one-time manual step.
-3. Push again, or open **Actions → Deploy to GitHub Pages → Run workflow**.
-4. When the run finishes, the game is at `https://<owner>.github.io/<repository>/`. The exact URL is shown on the workflow run and under Settings → Pages.
+1. In the repository on GitHub open **Settings → Pages**. Under **Build and deployment** set **Source** to **GitHub Actions**. This is a one-time manual step, and the workflow fails at "Configure Pages" until it is done.
+2. Push to the repository's default branch, or open **Actions → Deploy to GitHub Pages → Run workflow**. The workflow deploys from the default branch whatever its name is; pushes to other branches are skipped.
+3. When the run finishes, the game is at `https://<owner>.github.io/<repository>/`. The exact URL is shown on the workflow run and under Settings → Pages.
 
 The base path is not hardcoded. `vite.config.ts` reads it from the `VITE_BASE` environment variable, and the workflow sets it from the Pages configuration. Without `VITE_BASE` the build uses relative asset URLs (`./`), so `dist/` also works from any sub-folder on any static host.
 
