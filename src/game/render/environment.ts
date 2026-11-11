@@ -17,6 +17,8 @@ export interface Environment {
   group: Group; // world-space scenery
   sky: Group; // follows the camera
   update(dt: number, time: number, cam: Vector3, fx: Fx): void;
+  /** Escalation of the battle (surface races: the ship breaks up). */
+  setPhase(n: number, fx: Fx): void;
   dispose(): void;
 }
 
@@ -35,6 +37,8 @@ class Builder {
   readonly updaters: ((dt: number, time: number, cam: Vector3, fx: Fx) => void)[] = [];
   readonly rng: Rng;
   readonly density: number;
+  phase = 0;
+  readonly phaseHooks: ((n: number, fx: Fx) => void)[] = [];
 
   constructor(readonly track: Track, readonly theme: Theme, readonly quality: Quality, readonly glow: Texture, readonly cap: Capital) {
     this.rng = new Rng(track.length | 0);
@@ -177,11 +181,102 @@ function edgeBuoys(b: Builder, spacing: number): void {
   inst.done();
 }
 
+/**
+ * A fleet engagement in the distance: capital ships of two factions trading
+ * beams and flak. Every setting has one; how close and how fierce varies.
+ */
+function fleetBattle(b: Builder, cx: number, cz: number, nShips: number, distMin: number, distMax: number, rate: number, yMin = -350, yMax = 700): void {
+  const { rng } = b;
+  const fleet: { pos: Vector3; faction: number }[] = [];
+  for (let i = 0; i < nShips; i++) {
+    const faction = i % 2;
+    const ang = (i / nShips) * 6.283 + rng.range(-0.2, 0.2);
+    const dist = rng.range(distMin, distMax);
+    const len = rng.range(700, 1300);
+    const hull = buildHull(len, faction ? 0x58424a : 0x424a5c, faction ? 0xff3d5a : 0x35d8ff, faction ? 0xff5040 : 0x40c8ff, 100 + i * 17, b.quality === 'low' ? 10 : 40, 1);
+    const pos = new Vector3(cx + Math.cos(ang) * dist, rng.range(yMin, yMax), cz + Math.sin(ang) * dist);
+    hull.group.position.copy(pos);
+    hull.group.rotation.set(rng.range(-0.15, 0.15), rng.range(0, 6.283), rng.range(-0.25, 0.25));
+    hull.group.scale.setScalar(rng.range(1.2, 2));
+    b.group.add(hull.group);
+    b.disposables.push(...(hull.mats as unknown as { dispose(): void }[]));
+    b.disposables.push({ dispose: () => hull.group.traverse((o) => { const m = o as Mesh; if (m.geometry) m.geometry.dispose(); }) });
+    fleet.push({ pos, faction });
+  }
+  fleet.push({ pos: new Vector3(b.cap.cx, b.cap.cy + 40, b.cap.cz), faction: 1 });
+  if (fleet.length < 2) return;
+  // capital-scale beam exchanges between the fleets
+  const beamGeo = b.own(new CylinderGeometry(1, 1, 1, 6, 1, true));
+  beamGeo.rotateX(Math.PI / 2);
+  const beams: { mesh: Mesh; t: number; life: number }[] = [];
+  for (let i = 0; i < 8; i++) {
+    const mat = b.own(new MeshBasicMaterial({ color: 0xffffff, transparent: true, opacity: 0, blending: AdditiveBlending, depthWrite: false, fog: false }));
+    const mesh = new Mesh(beamGeo, mat);
+    mesh.visible = false; mesh.frustumCulled = false;
+    b.group.add(mesh);
+    beams.push({ mesh, t: 1, life: 0 });
+  }
+  let beamT = 0.5, flakT = 1;
+  const from = new Vector3(), to = new Vector3();
+  b.updaters.push((dt, _time, _cam, fx) => {
+    const k = rate * (1 + b.phase * 0.6);
+    beamT -= dt * k; flakT -= dt * k;
+    if (beamT <= 0) {
+      beamT = 0.25 + Math.random() * 0.9;
+      const bm = beams.find((x) => x.t >= x.life);
+      if (bm) {
+        const a = fleet[Math.floor(Math.random() * fleet.length)];
+        let c2 = fleet[Math.floor(Math.random() * fleet.length)];
+        for (let i = 0; i < 4 && c2.faction === a.faction; i++) c2 = fleet[Math.floor(Math.random() * fleet.length)];
+        from.copy(a.pos).add(v3.set((Math.random() - 0.5) * 300, (Math.random() - 0.5) * 120, (Math.random() - 0.5) * 300));
+        to.copy(c2.pos).add(v3.set((Math.random() - 0.5) * 500, (Math.random() - 0.5) * 200, (Math.random() - 0.5) * 500));
+        bm.mesh.position.copy(from).lerp(to, 0.5);
+        bm.mesh.lookAt(to);
+        bm.mesh.scale.set(7, 7, from.distanceTo(to));
+        (bm.mesh.material as MeshBasicMaterial).color.set(a.faction ? 0xff4030 : 0x40d0ff);
+        bm.t = 0; bm.life = 0.25 + Math.random() * 0.5; bm.mesh.visible = true;
+        if (Math.random() < 0.6) fx.explosion(to.x, to.y, to.z, 30 + Math.random() * 40, a.faction ? 0xff6030 : 0x60c0ff);
+      }
+    }
+    if (flakT <= 0) {
+      flakT = 0.5 + Math.random() * 1.4;
+      const a = fleet[Math.floor(Math.random() * (fleet.length - 1))];
+      fx.explosion(a.pos.x + (Math.random() - 0.5) * 900, a.pos.y + (Math.random() - 0.5) * 400, a.pos.z + (Math.random() - 0.5) * 900, 18 + Math.random() * 26, 0xffa040);
+    }
+    for (const bm of beams) {
+      if (bm.t >= bm.life) { if (bm.mesh.visible) bm.mesh.visible = false; continue; }
+      bm.t += dt;
+      (bm.mesh.material as MeshBasicMaterial).opacity = Math.sin(Math.min(1, bm.t / bm.life) * Math.PI) * 0.9;
+    }
+  });
+}
+
+function trackCentre(b: Builder): [number, number, number, number, number, number] {
+  let minX = 1e9, maxX = -1e9, minZ = 1e9, maxZ = -1e9;
+  for (const s of b.track.main.samples) { minX = Math.min(minX, s.x); maxX = Math.max(maxX, s.x); minZ = Math.min(minZ, s.z); maxZ = Math.max(maxZ, s.z); }
+  return [(minX + maxX) / 2, (minZ + maxZ) / 2, minX, maxX, minZ, maxZ];
+}
+
+/** Sky furniture for events that are not tied to one circuit's scenery. */
+function backdrop(b: Builder, themeId: string): void {
+  const bands = (c0: string, c1: string, c2: string, streak: string) => (ctx: CanvasRenderingContext2D, w: number, h: number) => {
+    const g = ctx.createLinearGradient(0, 0, 0, h);
+    g.addColorStop(0, c0); g.addColorStop(0.5, c1); g.addColorStop(1, c2);
+    ctx.fillStyle = g; ctx.fillRect(0, 0, w, h);
+    for (let i = 0; i < 30; i++) { ctx.fillStyle = streak; ctx.globalAlpha = 0.06 + Math.random() * 0.14; ctx.fillRect(0, Math.random() * h, w, 2 + Math.random() * 12); }
+    ctx.globalAlpha = 1;
+  };
+  if (themeId === 'neon') planet(b, [-0.5, 0.2, -0.8], 1500, bands('#1b3a8a', '#3f6fd8', '#152a66', '#bcd8ff'), 0.12);
+  else if (themeId === 'orbit') planet(b, [0.7, 0.2, -0.6], 1800, bands('#2c2836', '#4a4456', '#221f2c', '#b06bff'), 0.25);
+  else if (themeId === 'solar') { planet(b, [0.1, -0.55, 0.8], 3400, bands('#c8742c', '#e8a050', '#9a4a1c', '#ffe0a0'), 0.35); skySprite(b, [0.5, 0.42, -0.4], 3000, 0xfff0c0, 1); }
+  else planet(b, [-0.3, -0.35, -0.9], 2600, bands('#2a0c10', '#6a1c14', '#1c0808', '#ff7a20'), 0.6);
+  skySprite(b, [0.6, 0.5, 0.4], 1300, b.theme.sun, 0.9);
+}
+
 // --------------------------------------------------------- NEON FRONTIER
-function tunnelShell(b: Builder, samples: Sample[], from: number, to: number, closed: boolean, color: number): void {
+function tunnelShell(b: Builder, samples: Sample[], from: number, to: number, closed: boolean, color: number, H = 15): void {
   // enclosed tunnel: side walls + ceiling over [from, to) sample indices
   const pos: number[] = [], uv: number[] = [];
-  const H = 15;
   const n = samples.length;
   const quad = (a: number[], bb: number[], c: number[], d: number[], u0: number, u1: number) => {
     pos.push(...a, ...bb, ...c, ...c, ...bb, ...d);
@@ -611,69 +706,7 @@ function buildWarzone(b: Builder): void {
   for (const s of ms) { cx += s.x; cz += s.z; }
   cx /= ms.length; cz /= ms.length;
 
-  // the two fleets
-  const fleet: { pos: Vector3; faction: number }[] = [];
-  const nShips = b.quality === 'low' ? 4 : 7;
-  for (let i = 0; i < nShips; i++) {
-    const faction = i % 2;
-    const ang = (i / nShips) * 6.283 + rng.range(-0.2, 0.2);
-    const dist = rng.range(2300, 3600);
-    const len = rng.range(700, 1300);
-    const hull = buildHull(len, faction ? 0x58424a : 0x424a5c, faction ? 0xff3d5a : 0x35d8ff, faction ? 0xff5040 : 0x40c8ff, 100 + i * 17, b.quality === 'low' ? 10 : 40, 1);
-    const pos = new Vector3(cx + Math.cos(ang) * dist, rng.range(-350, 700), cz + Math.sin(ang) * dist);
-    hull.group.position.copy(pos);
-    hull.group.rotation.set(rng.range(-0.15, 0.15), rng.range(0, 6.283), rng.range(-0.25, 0.25));
-    hull.group.scale.setScalar(rng.range(1.2, 2));
-    b.group.add(hull.group);
-    b.disposables.push(...(hull.mats as unknown as { dispose(): void }[]));
-    b.disposables.push({ dispose: () => hull.group.traverse((o) => { const m = o as Mesh; if (m.geometry) m.geometry.dispose(); }) });
-    fleet.push({ pos, faction });
-  }
-  fleet.push({ pos: new Vector3(b.cap.cx, b.cap.cy + 40, b.cap.cz), faction: 1 });
-
-  // capital-scale beam exchanges between the fleets
-  const beamGeo = b.own(new CylinderGeometry(1, 1, 1, 6, 1, true));
-  beamGeo.rotateX(Math.PI / 2);
-  const beams: { mesh: Mesh; t: number; life: number }[] = [];
-  for (let i = 0; i < 8; i++) {
-    const mat = b.own(new MeshBasicMaterial({ color: 0xffffff, transparent: true, opacity: 0, blending: AdditiveBlending, depthWrite: false, fog: false }));
-    const mesh = new Mesh(beamGeo, mat);
-    mesh.visible = false; mesh.frustumCulled = false;
-    b.group.add(mesh);
-    beams.push({ mesh, t: 1, life: 0 });
-  }
-  let beamT = 0.5, flakT = 1;
-  const from = new Vector3(), to = new Vector3();
-  b.updaters.push((dt, _time, _cam, fx) => {
-    beamT -= dt; flakT -= dt;
-    if (beamT <= 0) {
-      beamT = 0.25 + Math.random() * 0.9;
-      const bm = beams.find((k) => k.t >= k.life);
-      if (bm) {
-        const a = fleet[Math.floor(Math.random() * fleet.length)];
-        let c2 = fleet[Math.floor(Math.random() * fleet.length)];
-        for (let k = 0; k < 4 && c2.faction === a.faction; k++) c2 = fleet[Math.floor(Math.random() * fleet.length)];
-        from.copy(a.pos).add(v3.set((Math.random() - 0.5) * 300, (Math.random() - 0.5) * 120, (Math.random() - 0.5) * 300));
-        to.copy(c2.pos).add(v3.set((Math.random() - 0.5) * 500, (Math.random() - 0.5) * 200, (Math.random() - 0.5) * 500));
-        bm.mesh.position.copy(from).lerp(to, 0.5);
-        bm.mesh.lookAt(to);
-        bm.mesh.scale.set(7, 7, from.distanceTo(to));
-        (bm.mesh.material as MeshBasicMaterial).color.set(a.faction ? 0xff4030 : 0x40d0ff);
-        bm.t = 0; bm.life = 0.25 + Math.random() * 0.5; bm.mesh.visible = true;
-        if (Math.random() < 0.6) fx.explosion(to.x, to.y, to.z, 30 + Math.random() * 40, a.faction ? 0xff6030 : 0x60c0ff);
-      }
-    }
-    if (flakT <= 0) {
-      flakT = 0.5 + Math.random() * 1.4;
-      const a = fleet[Math.floor(Math.random() * (fleet.length - 1))];
-      fx.explosion(a.pos.x + (Math.random() - 0.5) * 900, a.pos.y + (Math.random() - 0.5) * 400, a.pos.z + (Math.random() - 0.5) * 900, 18 + Math.random() * 26, 0xffa040);
-    }
-    for (const bm of beams) {
-      if (bm.t >= bm.life) { if (bm.mesh.visible) bm.mesh.visible = false; continue; }
-      bm.t += dt;
-      (bm.mesh.material as MeshBasicMaterial).opacity = Math.sin(Math.min(1, bm.t / bm.life) * Math.PI) * 0.9;
-    }
-  });
+  fleetBattle(b, cx, cz, b.quality === 'low' ? 4 : 7, 2300, 3600, 1);
 
   // wreckage drifting beside the racing line
   const metal = new MeshStandardMaterial({ color: 0x4a4048, metalness: 0.8, roughness: 0.5 });
@@ -700,7 +733,238 @@ function buildWarzone(b: Builder): void {
   void theme;
 }
 
-export function buildEnvironment(track: Track, theme: Theme, quality: Quality, glow: Texture, cap: Capital): Environment {
+// ------------------------------------------------- BATTLESHIP SURFACE
+function buildSurface(b: Builder, themeId: string): void {
+  const { track, rng, theme } = b;
+  const ms = track.main.samples;
+  const [cx, cz, minX, maxX, minZ, maxZ] = trackCentre(b);
+  backdrop(b, themeId);
+  spaceDust(b, 0x8899bb, 450);
+  fleetBattle(b, cx, cz, b.quality === 'low' ? 3 : 5, 1700, 2900, 1.3, 150, 900);
+
+  // ---- deck plating under and beside the roadway, with hull skirts dropping away at the edges
+  const deckTex = b.own(canvasTexture(256, 256, (ctx, w, h) => {
+    ctx.fillStyle = '#2a2f3c'; ctx.fillRect(0, 0, w, h);
+    for (let i = 0; i < 60; i++) { const k = 30 + Math.random() * 26; ctx.fillStyle = `rgb(${k},${k + 4},${k + 14})`; ctx.fillRect(Math.floor(Math.random() * 8) * 32, Math.floor(Math.random() * 8) * 32, 32 * (1 + Math.floor(Math.random() * 3)), 32); }
+    ctx.strokeStyle = 'rgba(0,0,0,0.5)'; ctx.lineWidth = 2;
+    for (let i = 0; i <= 8; i++) { ctx.beginPath(); ctx.moveTo(i * 32, 0); ctx.lineTo(i * 32, h); ctx.moveTo(0, i * 32); ctx.lineTo(w, i * 32); ctx.stroke(); }
+    ctx.fillStyle = '#c8a020'; for (let i = 0; i < 6; i++) ctx.fillRect(Math.random() * w, Math.random() * h, 26, 4);
+  }));
+  const deckMat = b.own(new MeshStandardMaterial({ map: deckTex, metalness: 0.55, roughness: 0.6, envMapIntensity: 0.3 }));
+  const winTex = b.own(windowTexture(91, ['#ffe6a8', '#fff3d0', hex(theme.rail)], 0.14));
+  const skirtMat = b.own(new MeshStandardMaterial({ color: 0x242836, metalness: 0.6, roughness: 0.6, emissiveMap: winTex, emissive: 0xffffff, emissiveIntensity: 1.0, side: DoubleSide }));
+  const breakA: Mesh[] = [], breakB: Mesh[] = [];
+  for (const path of track.paths) {
+    const ss = path.samples, n = ss.length;
+    const W = path.id === 0 ? 70 : 26;
+    const groups: Record<string, { pos: number[]; uv: number[]; spos: number[]; suv: number[] }> = {};
+    const count = path.closed ? n : n - 1;
+    for (let k = 0; k < count; k++) {
+      const a = ss[k], c = ss[(k + 1) % n];
+      const kind = path.id === 0 ? sectionAt(track, a.u) : '';
+      if (kind === 'gap') continue;
+      const key = kind === 'breakA' || kind === 'breakB' ? kind : 'solid';
+      const g = (groups[key] ??= { pos: [], uv: [], spos: [], suv: [] });
+      const wa = a.hw + W, wc = c.hw + W;
+      const y0 = a.y - 0.75, y1 = c.y - 0.75;
+      const al = [a.x - a.rx * wa, y0, a.z - a.rz * wa], ar = [a.x + a.rx * wa, y0, a.z + a.rz * wa];
+      const cl = [c.x - c.rx * wc, y1, c.z - c.rz * wc], cr = [c.x + c.rx * wc, y1, c.z + c.rz * wc];
+      g.pos.push(...al, ...cl, ...ar, ...ar, ...cl, ...cr);
+      const v0 = (k * path.step) / 48, v1 = ((k + 1) * path.step) / 48, u1 = (wa * 2) / 48;
+      g.uv.push(0, v0, 0, v1, u1, v0, u1, v0, 0, v1, u1, v1);
+      // skirts
+      const D = 110;
+      for (const [top0, top1] of [[al, cl], [ar, cr]]) {
+        g.spos.push(top0[0], top0[1], top0[2], top1[0], top1[1], top1[2], top0[0], top0[1] - D, top0[2], top0[0], top0[1] - D, top0[2], top1[0], top1[1], top1[2], top1[0], top1[1] - D, top1[2]);
+        const s0 = (k * path.step) / 160, s1 = ((k + 1) * path.step) / 160;
+        g.suv.push(s0, 1, s1, 1, s0, 0, s0, 0, s1, 1, s1, 0);
+      }
+    }
+    for (const [key, g] of Object.entries(groups)) {
+      const mk = (pos: number[], uv: number[], mat: Material) => {
+        const geo = b.own(new BufferGeometry());
+        geo.setAttribute('position', new BufferAttribute(new Float32Array(pos), 3));
+        geo.setAttribute('uv', new BufferAttribute(new Float32Array(uv), 2));
+        geo.computeVertexNormals();
+        const m = new Mesh(geo, mat);
+        b.group.add(m);
+        if (key === 'breakA') breakA.push(m); else if (key === 'breakB') breakB.push(m);
+      };
+      mk(g.pos, g.uv, deckMat); mk(g.spos, g.suv, skirtMat);
+    }
+  }
+
+  // ---- the mass of the ship: lower hull, citadel and island towers amidships
+  const hullMat = b.own(new MeshStandardMaterial({ color: 0x1c1f2a, metalness: 0.6, roughness: 0.7, emissiveMap: winTex, emissive: 0xffffff, emissiveIntensity: 0.7 }));
+  const box = b.own(new BoxGeometry(1, 1, 1));
+  const big = (x: number, y: number, z: number, sx: number, sy: number, sz: number, mat: Material = hullMat) => { const m = new Mesh(box, mat); m.position.set(x, y, z); m.scale.set(sx, sy, sz); b.group.add(m); return m; };
+  const lenX = maxX - minX, lenZ = maxZ - minZ;
+  big(cx, -150, cz, lenX + 420, 190, lenZ + 300);
+  big(cx - lenX * 0.05, -20, cz, lenX * 0.62, 70, lenZ * 0.34);
+  big(cx - lenX * 0.12, 40, cz, lenX * 0.3, 70, lenZ * 0.22);
+  big(cx - lenX * 0.2, 110, cz, lenX * 0.09, 90, lenZ * 0.12);
+  big(cx - lenX * 0.2, 150, cz, lenX * 0.095, 6, lenZ * 0.125, b.own(new MeshBasicMaterial({ color: new Color(theme.rail).multiplyScalar(1.3) })));
+  // engine block and exhausts at the stern (-x)
+  const nozGeo = b.own(new CylinderGeometry(46, 58, 150, 18, 1, true)); nozGeo.rotateZ(Math.PI / 2);
+  const nozMat = b.own(new MeshStandardMaterial({ color: 0x15161e, metalness: 0.7, roughness: 0.5, side: DoubleSide }));
+  const glowMat = b.own(new SpriteMaterial({ map: b.glow, color: theme.capitalGlow, blending: AdditiveBlending, depthWrite: false, transparent: true, fog: false }));
+  const engineGlows: Sprite[] = [];
+  for (const dz of [-0.3, -0.1, 0.1, 0.3]) {
+    const nz = new Mesh(nozGeo, nozMat);
+    nz.position.set(minX - 250, -90, cz + dz * (lenZ + 200));
+    b.group.add(nz);
+    const sp = new Sprite(glowMat); sp.position.set(minX - 330, -90, cz + dz * (lenZ + 200)); sp.scale.setScalar(380);
+    b.group.add(sp); engineGlows.push(sp);
+  }
+
+  // ---- enclosed sections: maintenance tunnel and the main hangar
+  const ribs: { s: Sample; color: number }[] = [];
+  let runStart = -1, runKind = '';
+  for (let i = 0; i <= ms.length; i++) {
+    const kind = i < ms.length ? sectionAt(track, ms[i].u) : '';
+    const inside = kind === 'tunnel' || kind === 'hangar';
+    if (inside && runStart < 0) { runStart = i; runKind = kind; }
+    if (runStart >= 0 && (!inside || kind !== runKind)) {
+      tunnelShell(b, ms, runStart, i + 1, false, runKind === 'hangar' ? 0xffb020 : theme.rail, runKind === 'hangar' ? 30 : 15);
+      runStart = inside ? i : -1; runKind = kind;
+    }
+    if (kind === 'tunnel' && i % 3 === 0) ribs.push({ s: ms[i], color: (i / 3) % 2 ? theme.rail : theme.railAlt });
+  }
+  for (let p = 1; p < track.paths.length; p++) {
+    const br = track.paths[p];
+    if (br.kind !== 'risky') continue;
+    for (let i = br.forkEnd + 10; i < br.mergeStart - 10; i += 4) ribs.push({ s: br.samples[i], color: 0xff7a1a });
+  }
+  if (ribs.length) tunnelRibs(b, ribs);
+
+  // ---- deck clutter: gun towers, masts and housings along the edges
+  const towerMat = new MeshStandardMaterial({ color: 0x272b3a, metalness: 0.6, roughness: 0.55, emissiveMap: winTex, emissive: 0xffffff, emissiveIntensity: 1.1 });
+  const maxT = Math.round(240 * b.density);
+  const towers = b.instanced(new BoxGeometry(1, 1, 1), towerMat, maxT);
+  const masts = b.instanced(new BoxGeometry(1, 1, 1), new MeshStandardMaterial({ color: 0x15161e, metalness: 0.7, roughness: 0.5 }), maxT);
+  const lamps = b.instanced(new BoxGeometry(1, 1, 1), new MeshBasicMaterial({ color: 0xffffff }), maxT);
+  const loose: { mesh: Mesh; s: Sample; side: number; phase: number; t: number; vel: Vector3; spin: Vector3 }[] = [];
+  for (let i = 0; i < maxT * 2; i++) {
+    const s = b.randomSample();
+    const kind = sectionAt(track, s.u);
+    if (kind === 'tunnel' || kind === 'hangar' || kind === 'gap') continue;
+    const side = rng.sign();
+    const lat = s.hw + rng.range(34, 62);
+    const x = s.x + s.rx * side * lat, z = s.z + s.rz * side * lat;
+    if (!b.clearOfTrack(x, s.y, z, 14) || b.capDist(x, z) < 90) continue;
+    const yaw = Math.atan2(s.hx, s.hz);
+    const w = rng.range(8, 20), d = rng.range(8, 22), h = rng.range(8, 46);
+    if (loose.length < 10 && rng.chance(0.08)) {
+      // a few towers are separate meshes so they can break away as the ship dies
+      const m = big(x, s.y + h / 2 - 1, z, w, h, d, towerMat);
+      m.rotation.y = yaw;
+      loose.push({ mesh: m, s, side, phase: loose.length < 4 ? 1 : 2, t: -1, vel: new Vector3(s.rx * side * rng.range(6, 14), rng.range(2, 8), s.rz * side * rng.range(6, 14)), spin: new Vector3(rng.range(-0.3, 0.3), rng.range(-0.2, 0.2), rng.range(-0.3, 0.3)) });
+      continue;
+    }
+    towers.add(mat4(x, s.y + h / 2 - 1, z, 0, yaw, 0, w, h, d));
+    if (rng.chance(0.5)) { masts.add(mat4(x, s.y + h + 9, z, 0, 0, 0, 0.7, 20, 0.7)); lamps.add(mat4(x, s.y + h + 19.5, z, 0, 0, 0, 1.2, 1.2, 1.2), rng.chance(0.5) ? 0xff3020 : theme.rail); }
+    else lamps.add(mat4(x - s.rx * side * (w / 2 + 0.2), s.y + h * 0.7, z - s.rz * side * (w / 2 + 0.2), 0, yaw, 0, 0.5, 1.2, d * 0.7), theme.railAlt);
+  }
+  towers.done(); masts.done(); lamps.done();
+  edgeBuoys(b, 12);
+
+  // ---- the ship dies: fires, secondary explosions, structures tearing loose
+  const firePts: { x: number; y: number; z: number; phase: number }[] = [];
+  for (let i = 0; i < 46; i++) {
+    const s = b.randomSample();
+    const kind = sectionAt(track, s.u);
+    if (kind === 'tunnel' || kind === 'hangar') continue;
+    const side = rng.sign(), lat = s.hw + rng.range(8, 50);
+    firePts.push({ x: s.x + s.rx * side * lat, y: s.y, z: s.z + s.rz * side * lat, phase: i < 16 ? 1 : 2 });
+  }
+  let boomT = 2, fireT = 0;
+  b.phaseHooks.push((n, fx) => {
+    for (const m of breakA) m.visible = n < 1;
+    for (const m of breakB) m.visible = n < 2;
+    // blow the deck sections out
+    for (const smp of ms) {
+      const kind = sectionAt(track, smp.u);
+      if ((kind === 'breakA' && n === 1) || (kind === 'breakB' && n === 2)) {
+        if (Math.random() < 0.5) fx.explosion(smp.x + (Math.random() - 0.5) * smp.hw * 2, smp.y, smp.z + (Math.random() - 0.5) * smp.hw * 2, 12 + Math.random() * 10, 0xffa030, 0, 20, 0, 0x2a2f3c);
+      }
+    }
+    for (const l of loose) if (l.phase === n && l.t < 0) { l.t = 0; fx.explosion(l.mesh.position.x, l.mesh.position.y - 6, l.mesh.position.z, 22, 0xffa030, 0, 6, 0, 0x272b3a); }
+    if (n >= 2) for (const g of engineGlows) g.visible = false; // main drive is gone
+  });
+  b.updaters.push((dt, time, cam, fx) => {
+    b.sky.rotation.y = time * 0.011; // the ship is in a slow turn
+    for (const l of loose) {
+      if (l.t < 0) continue;
+      l.t += dt;
+      l.mesh.position.addScaledVector(l.vel, dt);
+      l.mesh.rotation.x += l.spin.x * dt; l.mesh.rotation.y += l.spin.y * dt; l.mesh.rotation.z += l.spin.z * dt;
+      if (Math.random() < 0.25) fx.fire(l.mesh.position.x, l.mesh.position.y, l.mesh.position.z, 5);
+    }
+    const ph = b.phase;
+    boomT -= dt;
+    if (boomT <= 0) {
+      boomT = ph === 0 ? 2.2 + Math.random() * 2 : ph === 1 ? 0.8 + Math.random() : 0.3 + Math.random() * 0.5;
+      const a = Math.random() * 6.283, r = 90 + Math.random() * 320;
+      fx.explosion(cam.x + Math.cos(a) * r, cam.y + Math.random() * 50 - 12, cam.z + Math.sin(a) * r, 8 + Math.random() * (10 + ph * 8), Math.random() < 0.6 ? 0xffa030 : theme.capitalGlow, 0, 0, 0, 0x2a2f3c);
+    }
+    if (ph > 0) {
+      fireT -= dt;
+      if (fireT <= 0) {
+        fireT = 0.05 / fx.density;
+        for (let i = 0; i < 4; i++) {
+          const f = firePts[Math.floor(Math.random() * firePts.length)];
+          if (f.phase > ph) continue;
+          const dx = f.x - cam.x, dz = f.z - cam.z;
+          if (dx * dx + dz * dz < 360000) fx.fire(f.x, f.y, f.z, 4.5);
+        }
+      }
+    }
+  });
+}
+
+// ------------------------------------------------------------ BATTLE ZONE
+function buildArena(b: Builder, themeId: string): void {
+  const { rng, theme, track } = b;
+  const R = track.arena;
+  backdrop(b, themeId);
+  spaceDust(b, 0x8899cc, 800);
+  fleetBattle(b, 0, 0, b.quality === 'low' ? 3 : 6, 1700, 2800, 1.4, -500, 700);
+
+  // tactical grid: a faint plane that gives the eye something to judge speed and heading against
+  const gridTex = b.own(canvasTexture(128, 128, (ctx, w, h) => {
+    ctx.clearRect(0, 0, w, h);
+    ctx.strokeStyle = hex(theme.rail); ctx.lineWidth = 2; ctx.globalAlpha = 0.9;
+    ctx.strokeRect(0, 0, w, h);
+    ctx.globalAlpha = 0.35; ctx.beginPath(); ctx.moveTo(w / 2, 0); ctx.lineTo(w / 2, h); ctx.moveTo(0, h / 2); ctx.lineTo(w, h / 2); ctx.stroke();
+  }));
+  gridTex.repeat.set(R / 40, R / 40);
+  const gridGeo = b.own(new PlaneGeometry(R * 2.4, R * 2.4)); gridGeo.rotateX(-Math.PI / 2);
+  const grid = new Mesh(gridGeo, b.own(new MeshBasicMaterial({ map: gridTex, transparent: true, opacity: 0.16, blending: AdditiveBlending, depthWrite: false, side: DoubleSide, fog: false })));
+  grid.position.y = -7;
+  b.group.add(grid);
+  // boundary: a ring of beacons and a shimmering field wall
+  const wallGeo = b.own(new CylinderGeometry(R + 4, R + 4, 90, 96, 1, true));
+  const wallTex = b.own(canvasTexture(64, 64, (ctx, w, h) => { const g = ctx.createLinearGradient(0, 0, 0, h); g.addColorStop(0, 'rgba(0,0,0,0)'); g.addColorStop(0.5, hex(theme.railAlt)); g.addColorStop(1, 'rgba(0,0,0,0)'); ctx.fillStyle = g; ctx.fillRect(0, 0, w, h); ctx.fillStyle = 'rgba(255,255,255,0.5)'; ctx.fillRect(0, h / 2 - 1, w, 2); }));
+  wallTex.repeat.set(120, 1);
+  const wall = new Mesh(wallGeo, b.own(new MeshBasicMaterial({ map: wallTex, transparent: true, opacity: 0.4, blending: AdditiveBlending, depthWrite: false, side: DoubleSide, fog: false })));
+  b.group.add(wall);
+  const buoyMat = new MeshBasicMaterial({ color: 0xffffff });
+  const buoys = b.instanced(new OctahedronGeometry(2.2, 0), buoyMat, 120);
+  for (let i = 0; i < 120; i++) { const a = (i / 120) * 6.283; buoys.add(mat4(Math.cos(a) * R, 0, Math.sin(a) * R, 0, 0, 0, 1, 2.2, 1), i % 2 ? theme.rail : theme.railAlt); }
+  buoys.done();
+  // rocks and wreckage above and below the fighting plane (scenery only)
+  const rockMat = new MeshStandardMaterial({ color: themeId === 'neon' || themeId === 'warzone' ? 0x3a3238 : 0x6b6470, roughness: 0.9, metalness: themeId === 'neon' || themeId === 'warzone' ? 0.6 : 0.05, flatShading: true });
+  const rocks = b.instanced(rockGeometry(17, 1, 0.4), rockMat, Math.round(320 * b.density));
+  for (let i = 0; i < 320 * b.density; i++) {
+    const a = rng.range(0, 6.283), r = Math.sqrt(rng.next()) * R * 1.8;
+    const up = rng.sign() * rng.range(45, 420);
+    const sc = rng.range(5, 40);
+    rocks.add(mat4(Math.cos(a) * r, up, Math.sin(a) * r, rng.range(0, 6), rng.range(0, 6), rng.range(0, 6), sc, sc * rng.range(0.4, 1), sc * rng.range(0.7, 1.5)));
+  }
+  rocks.done();
+}
+
+export function buildEnvironment(track: Track, theme: Theme, themeId: string, quality: Quality, glow: Texture, cap: Capital): Environment {
   const b = new Builder(track, theme, quality, glow, cap);
   buildSky(b);
   switch (track.def.id) {
@@ -708,10 +972,18 @@ export function buildEnvironment(track: Track, theme: Theme, quality: Quality, g
     case 'orbit': buildOrbit(b); break;
     case 'solar': buildSolar(b); break;
     case 'warzone': buildWarzone(b); break;
+    case 'hulk': buildSurface(b, themeId); break;
+    case 'arena': buildArena(b, themeId); break;
+  }
+  // every setting sits inside the same war: a fleet action is always visible somewhere in the sky
+  if (track.def.id === 'neon' || track.def.id === 'orbit' || track.def.id === 'solar') {
+    const [cx, cz] = trackCentre(b);
+    fleetBattle(b, cx, cz, quality === 'low' ? 1 : 3, 2400, 3800, 0.5, 500, 1300);
   }
   return {
     group: b.group, sky: b.sky,
     update(dt, time, cam, fx) { b.sky.position.copy(cam); for (const u of b.updaters) u(dt, time, cam, fx); },
+    setPhase(n, fx) { if (n === b.phase) return; b.phase = n; for (const h of b.phaseHooks) h(n, fx); },
     dispose() {
       for (const d of b.disposables) d.dispose();
       b.group.traverse((o) => { const m = o as Mesh; if (m.geometry) m.geometry.dispose(); });

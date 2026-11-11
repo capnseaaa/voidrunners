@@ -17,6 +17,7 @@ import type { ObstacleKind } from '../sim/layout';
 import { COUNTDOWN_TIME, type RaceSim } from '../sim/race';
 import type { Ship } from '../sim/ship';
 import { CAP_BOLT, MISSILE } from '../sim/weapons';
+import { T_COMP, T_DRONE, T_SHIP } from '../sim/race';
 import { frameAt, newFrame } from '../tracks/track';
 import { buildCapitalVisual, type CapitalVisual } from './capitalMesh';
 import { buildEnvironment, type Environment } from './environment';
@@ -28,7 +29,7 @@ import { canvasTexture, glowTexture, Kit, rockGeometry, zCyl } from './util';
 
 export type Quality = 'low' | 'medium' | 'high';
 
-interface ShipVis { ship: Ship; model: ShipModel; shield: Mesh; tag: Sprite | null; trailT: number; phasedOn: boolean }
+interface ShipVis { ship: Ship; model: ShipModel; shield: Mesh; tag: Sprite | null; bars: Sprite[]; trailT: number; phasedOn: boolean }
 interface ObsVis { kind: ObstacleKind; body: InstancedMesh; glow: InstancedMesh | null; ids: number[] }
 
 const m4 = new Matrix4(), q = new Quaternion(), e = new Euler(), v3 = new Vector3(), s3 = new Vector3(), col = new Color();
@@ -51,6 +52,9 @@ export class RaceRenderer {
   private readonly trackVis: TrackVisual;
   private readonly capVis: CapitalVisual;
   private readonly ships: ShipVis[] = [];
+  private readonly droneMesh: InstancedMesh | null = null;
+  private readonly droneGlow: InstancedMesh | null = null;
+  private lastPhase = 0;
   private readonly bolts: InstancedMesh;
   private readonly missiles: InstancedMesh;
   private readonly pickups: InstancedMesh;
@@ -84,14 +88,19 @@ export class RaceRenderer {
     this.scene.add(hemi, sun);
 
     this.fx = new Fx(quality);
-    this.env = buildEnvironment(sim.track, theme, quality, this.glowTex, sim.capital);
-    this.trackVis = buildTrackVisual(sim.track, sim.layout, theme, this.glowTex);
+    this.env = buildEnvironment(sim.track, theme, sim.race.theme, quality, this.glowTex, sim.capital);
+    // open-space battles have no roadway
+    this.trackVis = sim.track.arena > 0 ? { group: new Group(), update() { /* nothing */ }, setPhase() { /* nothing */ }, dispose() { /* nothing */ } } : buildTrackVisual(sim.track, sim.layout, theme, this.glowTex);
     this.capVis = buildCapitalVisual(sim.capital, theme, this.glowTex, sim.track.def.capital.side);
     this.scene.add(this.env.sky, this.env.group, this.trackVis.group, this.capVis.group, this.fx.group);
 
     // ---- ships
     const shieldGeo = new SphereGeometry(1, 16, 12);
     this.disposables.push(shieldGeo);
+    const barBack = new SpriteMaterial({ color: 0x000000, transparent: true, opacity: 0.6, depthTest: false, depthWrite: false, fog: false });
+    const barHull = new SpriteMaterial({ color: 0x7dff5a, depthTest: false, depthWrite: false, fog: false });
+    const barShield = new SpriteMaterial({ color: 0x35c8ff, depthTest: false, depthWrite: false, fog: false });
+    this.disposables.push(barBack, barHull, barShield);
     for (const ship of sim.ships) {
       const model = buildShipModel(ship.def, this.glowTex);
       const shieldMat = new MeshBasicMaterial({ color: 0x60c8ff, transparent: true, opacity: 0, blending: AdditiveBlending, depthWrite: false, side: BackSide });
@@ -112,9 +121,13 @@ export class RaceRenderer {
         this.scene.add(tag);
         this.disposables.push(tex, tm);
       }
+      const bars: Sprite[] = [];
+      if (!ship.isPlayer) {
+        for (const m of [barBack, barHull, barShield]) { const sp = new Sprite(m); sp.center.set(0, 0.5); sp.renderOrder = 21; sp.visible = false; this.scene.add(sp); bars.push(sp); }
+      }
       this.disposables.push(shieldMat);
       this.scene.add(model.group);
-      this.ships.push({ ship, model, shield, tag, trailT: 0, phasedOn: false });
+      this.ships.push({ ship, model, shield, tag, bars, trailT: 0, phasedOn: false });
     }
 
     // ---- projectiles
@@ -148,6 +161,31 @@ export class RaceRenderer {
     this.disposables.push(pkGeo, pkMat);
 
     this.buildObstacles();
+
+    // ---- enemy fighters
+    const nd = sim.drones.drones.length;
+    if (nd > 0) {
+      const dm = new MeshStandardMaterial({ color: 0x5a1c22, metalness: 0.7, roughness: 0.4 });
+      const dk = new Kit();
+      dk.add('hull', new BoxGeometry(1.1, 0.7, 4.2), 0, 0, 0.2);
+      dk.add('hull', new BoxGeometry(5.4, 0.14, 1.4), 0, 0, -0.6);
+      dk.add('hull', new BoxGeometry(0.16, 1.9, 1.7), 2.7, 0, -0.6);
+      dk.add('hull', new BoxGeometry(0.16, 1.9, 1.7), -2.7, 0, -0.6);
+      dk.add('hull', new ConeGeometry(0.5, 1.6, 6), 0, 0, 2.9, Math.PI / 2, 0, 0);
+      const dg = (dk.build({ hull: dm }).children[0] as Mesh).geometry;
+      this.droneMesh = new InstancedMesh(dg, dm, nd);
+      const gk = new Kit();
+      gk.add('hull', new BoxGeometry(0.7, 0.5, 0.2), 0, 0, -2.0);
+      gk.add('hull', new BoxGeometry(0.08, 1.7, 0.2), 2.72, 0, -1.4);
+      gk.add('hull', new BoxGeometry(0.08, 1.7, 0.2), -2.72, 0, -1.4);
+      gk.add('hull', new BoxGeometry(0.5, 0.2, 0.5), 0, 0.42, 0.9);
+      const gm = new MeshBasicMaterial({ color: 0xffffff });
+      const gg = (gk.build({ hull: gm }).children[0] as Mesh).geometry;
+      this.droneGlow = new InstancedMesh(gg, gm, nd);
+      for (const im of [this.droneMesh, this.droneGlow]) { im.instanceMatrix.setUsage(DynamicDrawUsage); im.frustumCulled = false; im.count = 0; this.scene.add(im); }
+      for (let i = 0; i < nd; i++) this.droneGlow.setColorAt(i, col.set(0xff3020));
+      this.disposables.push(dm, dg, gm, gg);
+    }
 
     // ---- bombardment markers
     const ringGeo = new RingGeometry(0.9, 1, 40); ringGeo.rotateX(-Math.PI / 2);
@@ -368,6 +406,22 @@ export class RaceRenderer {
         case 'strike': fx.explosion(ev.x, ev.y + 1, ev.z, 11, 0xff4020); if (dist < 90) this.addShake(0.8 * (1 - dist / 90)); break;
         case 'obstacleDestroyed': if (dist < 1200) fx.explosion(ev.x, ev.y, ev.z, clamp(ev.a * 1.5, 4, 9), ev.text === 'mine' ? 0xff3020 : ev.text === 'traffic' ? 0xffc040 : 0xb0a090, 0, 0, 0, ev.text === 'asteroid' ? 0x7a7280 : 0x888890); break;
         case 'go': this.addShake(0.3); break;
+        case 'flare': {
+          // a fan of burning decoys thrown out behind the ship
+          const s = sim.ships[ev.ship];
+          for (let k = 0; k < 14 * fx.density; k++) {
+            const a = s.yaw + Math.PI + (Math.random() - 0.5) * 1.6;
+            const sp = 18 + Math.random() * 26;
+            fx.particles.emit(ev.x, ev.y, ev.z, Math.sin(a) * sp + s.vx * 0.5, 4 + Math.random() * 10, Math.cos(a) * sp + s.vz * 0.5, 1, 0.9, 0.6, 2.2, 0.4, 0.9 + Math.random() * 0.6, 0.8);
+          }
+          fx.flashLight(ev.x, ev.y + 1, ev.z, 0xffe0a0, 40, 0.4);
+          break;
+        }
+        case 'bounty': fx.ring(ev.x, ev.y, ev.z, 16, 0xffe14a, 0.6); fx.sparks(ev.x, ev.y, ev.z, 18, 0xffe14a, 20); break;
+        case 'droneDestroyed': if (dist < 1500) { fx.explosion(ev.x, ev.y, ev.z, 7, 0xff7030, 0, 0, 0, 0x5a1c22); fx.explosion(ev.x, ev.y, ev.z, 4, 0xffe080); } if (dist < 100) this.addShake(0.35); break;
+        case 'droneFire': if (dist < 500) fx.puff(ev.x, ev.y, ev.z, 0xff5030, 3, 0.07); break;
+        case 'enemyMissile': if (dist < 1400) { fx.puff(ev.x, ev.y, ev.z, 0xff7040, 14, 0.25); fx.sparks(ev.x, ev.y, ev.z, 8, 0xff7040, 16); } break;
+        case 'phase': this.addShake(1.4); break;
         default: break;
       }
     }
@@ -385,6 +439,7 @@ export class RaceRenderer {
       const s = sv.ship, g = sv.model.group, body = sv.model.body;
       g.visible = s.alive;
       if (sv.tag) sv.tag.visible = false;
+      if (!s.alive) for (const bsp of sv.bars) bsp.visible = false;
       if (!s.alive) continue;
       const bob = Math.sin(time * 2.3 + s.index * 1.7) * 0.12;
       g.position.set(s.x, s.y + bob, s.z);
@@ -421,15 +476,32 @@ export class RaceRenderer {
       if (s.magnet && Math.random() < 0.3) fx.ring(s.x, s.y - 1, s.z, 30, 0x7dff5a, 0.4);
       // shield bubble
       const sm = sv.shield.material as MeshBasicMaterial;
-      let op = s.hitFlash * (s.shield > 0 ? 1.1 : 0.2);
-      let sc = 0x60c8ff;
+      let op = s.hitFlash * (s.shield > 0 ? 1.1 : 0.75);
+      let sc = s.shield > 0 ? 0x60c8ff : 0xff7a30; // shields flare blue, bare hull flashes hot orange
       if (s.bulwark) { op = 0.55 + Math.sin(time * 14) * 0.12; sc = 0xffa020; }
       else if (s.invuln > 0 && s.invuln < 100) { op = Math.max(op, 0.3 + Math.sin(time * 20) * 0.2); sc = 0xffffff; }
       else if (s.overdriveT > 0) { op = Math.max(op, 0.22); sc = 0xff40e0; }
       sm.opacity = op; sm.color.set(sc);
       sv.shield.visible = op > 0.01;
       // damaged ships smoke and spark
-      if (s.hp < st.armour * 0.35 && Math.random() < 0.25) fx.fire(s.x, s.y + 0.5, s.z, 1.1);
+      if (s.hp < st.armour * 0.35 && Math.random() < 0.3) fx.fire(s.x, s.y + 0.5, s.z, 1.1);
+      else if (s.hp < st.armour * 0.65 && Math.random() < 0.12) fx.sparks(s.x, s.y + 0.4, s.z, 2, 0xffb060, 9);
+      // health bars over rivals: hull (green) and shields (blue)
+      if (sv.bars.length) {
+        const d = Math.hypot(s.x - cam.position.x, s.y - cam.position.y, s.z - cam.position.z);
+        const show = d < 300 && d > 8;
+        for (const bsp of sv.bars) bsp.visible = show;
+        if (show) {
+          const k = clamp(d * 0.05, 3.2, 13), w = k * 1.7, hgt = k * 0.11;
+          const by = s.y + 2.6 + d * 0.008;
+          // anchor the bars' left edge so they drain toward the right
+          const rx = Math.cos(this.camYaw), rz = -Math.sin(this.camYaw);
+          const lx = s.x + rx * w * 0.5, lz = s.z + rz * w * 0.5;
+          sv.bars[0].position.set(lx, by, lz); sv.bars[0].scale.set(w, hgt * 2.6, 1);
+          sv.bars[1].position.set(lx, by - hgt * 0.6, lz); sv.bars[1].scale.set(Math.max(0.001, w * clamp(s.hp / st.armour, 0, 1)), hgt, 1);
+          sv.bars[2].position.set(lx, by + hgt * 0.6, lz); sv.bars[2].scale.set(Math.max(0.001, w * clamp(s.shield / st.shield, 0, 1)), hgt, 1);
+        }
+      }
       if (sv.tag) {
         const d = Math.hypot(s.x - cam.position.x, s.y - cam.position.y, s.z - cam.position.z);
         if (d < 340 && d > 8) {
@@ -449,8 +521,9 @@ export class RaceRenderer {
       dir.set(p.vx, p.vy, p.vz).normalize();
       q.setFromUnitVectors(Z, dir);
       if (p.kind === MISSILE) {
-        if (nm < 48) { m4.compose(v3.set(p.x, p.y, p.z), q, s3.set(1.5, 1.5, 1.5)); this.missiles.setMatrixAt(nm++, m4); }
-        fx.particles.emit(p.x - dir.x * 1.6, p.y - dir.y * 1.6, p.z - dir.z * 1.6, (Math.random() - 0.5) * 3, (Math.random() - 0.5) * 3, (Math.random() - 0.5) * 3, 1, 0.6, 0.25, 1.6, 0.2, 0.4, 0);
+        if (nm < 48) { const ms = p.owner < 0 ? 2.3 : 1.5; m4.compose(v3.set(p.x, p.y, p.z), q, s3.set(ms, ms, ms)); this.missiles.setMatrixAt(nm++, m4); }
+        if (p.owner < 0) fx.particles.emit(p.x - dir.x * 1.6, p.y - dir.y * 1.6, p.z - dir.z * 1.6, (Math.random() - 0.5) * 3, (Math.random() - 0.5) * 3, (Math.random() - 0.5) * 3, 1, 0.15, 0.1, 2.4, 0.3, 0.55, 0);
+        else fx.particles.emit(p.x - dir.x * 1.6, p.y - dir.y * 1.6, p.z - dir.z * 1.6, (Math.random() - 0.5) * 3, (Math.random() - 0.5) * 3, (Math.random() - 0.5) * 3, 1, 0.6, 0.25, 1.6, 0.2, 0.4, 0);
         fx.particles.emit(p.x - dir.x * 1.2, p.y - dir.y * 1.2, p.z - dir.z * 1.2, 0, 0, 0, 1, 0.95, 0.8, 2.6, 0, 0.06, 0);
       } else {
         const big = p.kind === CAP_BOLT;
@@ -464,6 +537,28 @@ export class RaceRenderer {
     this.bolts.count = nb; this.missiles.count = nm;
     this.bolts.instanceMatrix.needsUpdate = true; this.missiles.instanceMatrix.needsUpdate = true;
     if (this.bolts.instanceColor) this.bolts.instanceColor.needsUpdate = true;
+
+    // enemy fighters
+    if (this.droneMesh && this.droneGlow) {
+      let n = 0;
+      for (const d of sim.drones.drones) {
+        if (!d.active) continue;
+        m4.compose(v3.set(d.x, d.y, d.z), q.setFromEuler(e.set(0, d.yaw, d.roll * 0.8)), s3.set(1.25, 1.25, 1.25));
+        this.droneMesh.setMatrixAt(n, m4); this.droneGlow.setMatrixAt(n, m4);
+        this.droneGlow.setColorAt(n, col.set(d.flash > 0.3 ? 0xffffff : 0xff3020).multiplyScalar(1.5));
+        n++;
+        if (Math.random() < 0.6) fx.particles.emit(d.x - Math.sin(d.yaw) * 2.6, d.y, d.z - Math.cos(d.yaw) * 2.6, 0, 0, 0, 0.9, 0.2, 0.1, 1.5, 0, 0.18, 0);
+        if (d.hp < d.maxHp * 0.5 && Math.random() < 0.3) fx.fire(d.x, d.y, d.z, 1);
+      }
+      this.droneMesh.count = n; this.droneGlow.count = n;
+      this.droneMesh.instanceMatrix.needsUpdate = true; this.droneGlow.instanceMatrix.needsUpdate = true;
+      if (this.droneGlow.instanceColor) this.droneGlow.instanceColor.needsUpdate = true;
+    }
+    if (sim.warPhase !== this.lastPhase) {
+      this.lastPhase = sim.warPhase;
+      this.env.setPhase(sim.warPhase, fx);
+      this.trackVis.setPhase(sim.warPhase);
+    }
 
     // pickups
     let np = 0;
@@ -535,8 +630,9 @@ export class RaceRenderer {
     const pl = sim.player;
     let tx = 0, ty = 0, tz = 0, has = false, rc = 0xff5030;
     if (pl.alive && !pl.finished) {
-      if (pl.targetKind === 1) { const o = sim.ships[pl.targetIdx]; if (o && o.alive) { tx = o.x; ty = o.y; tz = o.z; has = true; } }
-      else if (pl.targetKind === 2) { const c = sim.capital.components[pl.targetIdx]; if (c && c.alive) { tx = c.x; ty = c.y; tz = c.z; has = true; rc = 0xffc030; } }
+      if (pl.targetKind === T_SHIP) { const o = sim.ships[pl.targetIdx]; if (o && o.alive) { tx = o.x; ty = o.y; tz = o.z; has = true; } }
+      else if (pl.targetKind === T_COMP) { const c = sim.capital.components[pl.targetIdx]; if (c && c.alive) { tx = c.x; ty = c.y; tz = c.z; has = true; rc = 0xffc030; } }
+      else if (pl.targetKind === T_DRONE) { const d = sim.drones.drones[pl.targetIdx]; if (d && d.active) { tx = d.x; ty = d.y; tz = d.z; has = true; rc = 0xff3030; } }
     }
     this.reticle.visible = has;
     if (has) {
@@ -579,7 +675,7 @@ export class RaceRenderer {
     cam.position.set(s.x - fx * back + (Math.random() - 0.5) * sh, this.camY + (Math.random() - 0.5) * sh, s.z - fz * back + (Math.random() - 0.5) * sh);
     const lhx = Math.sin(s.yaw), lhz = Math.cos(s.yaw);
     cam.lookAt(s.x + lhx * lookAhead, s.y + 1.6 + Math.sin(s.pitch) * lookAhead, s.z + lhz * lookAhead);
-    cam.rotateZ(-s.roll * 0.12);
+    cam.rotateZ(-s.roll * 0.12 + (sim.race.dying ? Math.sin(this.time * 0.45) * 0.035 * sim.warPhase : 0)); // a dying ship lists under the racers
     const targetFov = 68 + speedFrac * 13 + (s.bursting ? 12 : s.boosting || s.padT > 0 ? 7 : 0);
     this.fov += (targetFov - this.fov) * Math.min(1, dt * 4);
     if (Math.abs(cam.fov - this.fov) > 0.05) { cam.fov = this.fov; cam.updateProjectionMatrix(); }

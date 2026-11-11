@@ -19,6 +19,7 @@ export interface Settings {
   gyro: boolean; // steer by tilting the device
   gyroSensitivity: number; // 0.4 .. 2.5
   gyroZero: number; // calibrated neutral tilt, degrees
+  gyroInvert: boolean;
   autoThrottle: boolean; // touch: accelerate unless braking
 }
 
@@ -51,7 +52,7 @@ export interface StorageLike {
 }
 
 export function defaultSettings(): Settings {
-  return { quality: 'medium', masterVolume: 0.8, musicVolume: 0.55, sfxVolume: 0.8, cameraShake: true, showMinimap: true, touchControls: 'auto', gyro: false, gyroSensitivity: 1, gyroZero: 0, autoThrottle: true };
+  return { quality: 'medium', masterVolume: 0.8, musicVolume: 0.55, sfxVolume: 0.8, cameraShake: true, showMinimap: true, touchControls: 'auto', gyro: false, gyroSensitivity: 1, gyroZero: 0, gyroInvert: false, autoThrottle: true };
 }
 
 export function defaultSave(): SaveData {
@@ -125,6 +126,7 @@ export function sanitizeSave(raw: unknown): SaveData {
     d.settings.gyroSensitivity = num(s.gyroSensitivity, 1, 0.4, 2.5);
     d.settings.gyroZero = num(s.gyroZero, 0, -60, 60);
     if (typeof s.autoThrottle === 'boolean') d.settings.autoThrottle = s.autoThrottle;
+    if (typeof s.gyroInvert === 'boolean') d.settings.gyroInvert = s.gyroInvert;
   }
   return d;
 }

@@ -6,11 +6,11 @@ import {
   MeshStandardMaterial, PlaneGeometry, Quaternion, Texture, Vector3, Euler,
 } from 'three';
 import type { Layout } from '../sim/layout';
-import { frameAt, idxAtS, insidePath, newFrame, type Track, type TrackPath } from '../tracks/track';
+import { frameAt, idxAtS, insidePath, newFrame, sectionAt, type Track, type TrackPath } from '../tracks/track';
 import type { Theme } from './themes';
 import { canvasTexture, hex, Kit } from './util';
 
-export interface TrackVisual { group: Group; update(time: number): void; dispose(): void }
+export interface TrackVisual { group: Group; update(time: number): void; setPhase(n: number): void; dispose(): void }
 
 function roadTextures(theme: Theme): { map: Texture; emissive: Texture } {
   const draw = (emissive: boolean) => canvasTexture(256, 512, (ctx, w, h) => {
@@ -83,9 +83,15 @@ export function buildTrackVisual(track: Track, layout: Layout, theme: Theme, glo
   const railR = new MeshBasicMaterial({ color: new Color(theme.railAlt).multiplyScalar(1.05) });
   disposables.push(roadMat, wallMat, railL, railR);
 
+  const breakA: Mesh[] = [], breakB: Mesh[] = [];
   for (const path of track.paths) {
     const ss = path.samples, n = ss.length;
     const count = path.closed ? n + 1 : n;
+    const holeKind = (i: number): string => {
+      if (path.id !== 0) return '';
+      const k = sectionAt(track, ss[i].u);
+      return k === 'gap' || k === 'breakA' || k === 'breakB' ? k : '';
+    };
     const pos = new Float32Array(count * 2 * 3), uv = new Float32Array(count * 2 * 2), nor = new Float32Array(count * 2 * 3);
     for (let k = 0; k < count; k++) {
       const s = ss[k % n];
@@ -94,18 +100,27 @@ export function buildTrackVisual(track: Track, layout: Layout, theme: Theme, glo
       uv.set([0, v, 1, v], k * 4);
       nor.set([0, 1, 0, 0, 1, 0], k * 6);
     }
-    const idx: number[] = [];
-    for (let k = 0; k < count - 1; k++) { const a = k * 2; idx.push(a, a + 2, a + 1, a + 1, a + 2, a + 3); }
-    const geo = new BufferGeometry();
-    geo.setAttribute('position', new BufferAttribute(pos, 3));
-    geo.setAttribute('uv', new BufferAttribute(uv, 2));
-    geo.setAttribute('normal', new BufferAttribute(nor, 3));
-    geo.setIndex(idx);
-    const road = new Mesh(geo, roadMat);
-    // branches sit a hair above the main ribbon so overlapping junction surfaces never z-fight
-    if (path.id > 0) road.position.y = 0.04;
-    group.add(road);
-    disposables.push(geo);
+    // quads are grouped: solid road, and stretches that are blown away at war phase 1 / 2
+    const idx: number[] = [], idxA: number[] = [], idxB: number[] = [];
+    for (let k = 0; k < count - 1; k++) {
+      const a = k * 2;
+      const kind = holeKind(k % n);
+      if (kind === 'gap') continue;
+      (kind === 'breakA' ? idxA : kind === 'breakB' ? idxB : idx).push(a, a + 2, a + 1, a + 1, a + 2, a + 3);
+    }
+    const attrs = { position: new BufferAttribute(pos, 3), uv: new BufferAttribute(uv, 2), normal: new BufferAttribute(nor, 3) };
+    for (const [list, bucket] of [[idx, null], [idxA, breakA], [idxB, breakB]] as const) {
+      if (!list.length) continue;
+      const geo = new BufferGeometry();
+      geo.setAttribute('position', attrs.position); geo.setAttribute('uv', attrs.uv); geo.setAttribute('normal', attrs.normal);
+      geo.setIndex(list as number[]);
+      const road = new Mesh(geo, roadMat);
+      // branches sit a hair above the main ribbon so overlapping junction surfaces never z-fight
+      if (path.id > 0) road.position.y = 0.04;
+      group.add(road);
+      if (bucket) bucket.push(road);
+      disposables.push(geo);
+    }
 
     // barriers
     const open = openEdges(track, path);
@@ -114,7 +129,7 @@ export function buildTrackVisual(track: Track, layout: Layout, theme: Theme, glo
       const wp: number[] = [], rp: number[] = [];
       for (let k = 0; k < count - 1; k++) {
         const i0 = k % n, i1 = (k + 1) % n;
-        if (flags[i0] || flags[i1]) continue;
+        if (flags[i0] || flags[i1] || holeKind(i0) || holeKind(i1)) continue;
         const a = ss[i0], b = ss[i1];
         const ax = a.x + a.rx * a.hw * side, az = a.z + a.rz * a.hw * side;
         const bx = b.x + b.rx * b.hw * side, bz = b.z + b.rz * b.hw * side;
@@ -159,6 +174,7 @@ export function buildTrackVisual(track: Track, layout: Layout, theme: Theme, glo
     let c = 0;
     for (const p of track.paths) for (let i = 0; i < p.samples.length; i += every) {
       const s = p.samples[i];
+      if (p.id === 0) { const kd = sectionAt(track, s.u); if (kd === 'gap' || kd === 'breakA' || kd === 'breakB') continue; }
       // yaw then pitch, so the rib always stays level across the road
       q.setFromEuler(eu.set(-Math.asin(Math.max(-1, Math.min(1, s.ty))), Math.atan2(s.hx, s.hz), 0));
       m.compose(v.set(s.x, s.y - 0.5, s.z), q, sc.set(s.hw * 2 + 2.6, 1, 1));
@@ -275,6 +291,7 @@ export function buildTrackVisual(track: Track, layout: Layout, theme: Theme, glo
   return {
     group,
     update(time: number) { padTex.offset.y = -(time * 1.6) % 1; },
+    setPhase(n: number) { for (const m of breakA) m.visible = n < 1; for (const m of breakB) m.visible = n < 2; },
     dispose() { for (const d of disposables) d.dispose(); group.traverse((o) => { const m = o as Mesh; if (m.geometry) m.geometry.dispose(); }); },
   };
 }

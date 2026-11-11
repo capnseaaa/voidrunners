@@ -1,17 +1,30 @@
 // All sound is synthesised with the Web Audio API: no samples, no downloads.
 // The context is created lazily on the first user gesture (browser autoplay rules).
 
-export type MusicId = 'menu' | 'neon' | 'orbit' | 'solar' | 'warzone';
+export type MusicId = 'menu' | 'neon' | 'orbit' | 'solar' | 'warzone' | 'battle' | 'surface';
 
-interface Song { bpm: number; root: number; chords: number[][]; bass: number[]; arp: number[]; drive: number; snare: boolean; lead: number[] }
+// Hard, fast, four-on-the-floor arcade techno with rolling bass, gated snares,
+// arpeggios and synth stabs: the sound of a 1980s vision of the future.
+// chords are semitone offsets from the root; patterns are per 16th step.
+interface Song {
+  bpm: number; root: number; chords: number[][];
+  bass: number[]; // semitone offset per step, -99 = rest (rolls off the kick)
+  arp: number[]; lead: number[]; stab: number[]; // stab: 1 = chord hit on that step
+  drive: number;
+}
 
-// chords are semitone offsets from the root; patterns are per 16th step
+const R = -99;
+const ROLL = [R, 0, 0, 12, R, 0, 0, 12, R, 0, 0, 12, R, 0, 12, 0];
+const GALLOP = [0, R, 0, 0, 0, R, 0, 0, 0, R, 0, 0, 0, R, 12, 12];
+const OCT = [0, 12, 0, 12, 0, 12, 0, 12, 0, 12, 0, 12, 0, 12, 7, 12];
 const SONGS: Record<MusicId, Song> = {
-  menu: { bpm: 96, root: 45, chords: [[0, 3, 7], [-4, 0, 3], [-9, -5, -2], [-2, 2, 5]], bass: [1, 0, 0, 0, 1, 0, 0, 1, 0, 0, 1, 0, 1, 0, 0, 0], arp: [0, 1, 2, 1, 3, 1, 2, 1, 0, 1, 2, 1, 3, 2, 1, 2], drive: 0.5, snare: false, lead: [7, 0, 0, 5, 0, 0, 3, 0, 0, 0, 5, 0, 7, 0, 0, 0] },
-  neon: { bpm: 118, root: 40, chords: [[0, 3, 7], [-4, 0, 3], [3, 7, 10], [-2, 2, 5]], bass: [1, 0, 1, 1, 0, 1, 1, 0, 1, 0, 1, 1, 0, 1, 1, 1], arp: [0, 2, 1, 2, 3, 2, 1, 2, 0, 2, 1, 2, 3, 2, 4, 2], drive: 1, snare: true, lead: [12, 0, 10, 0, 7, 0, 0, 5, 7, 0, 0, 0, 3, 0, 5, 0] },
-  orbit: { bpm: 104, root: 38, chords: [[0, 3, 7], [-4, 0, 3], [-7, -4, 0], [-1, 2, 5]], bass: [1, 0, 0, 1, 0, 0, 1, 0, 0, 0, 1, 0, 0, 1, 0, 0], arp: [0, 0, 2, 0, 3, 0, 1, 0, 4, 0, 2, 0, 1, 0, 3, 0], drive: 0.7, snare: true, lead: [0, 0, 7, 0, 0, 0, 8, 0, 0, 0, 7, 0, 0, 3, 0, 0] },
-  solar: { bpm: 124, root: 42, chords: [[0, 3, 7], [1, 5, 8], [-2, 2, 5], [-4, 0, 3]], bass: [1, 1, 0, 1, 1, 0, 1, 1, 1, 1, 0, 1, 1, 0, 1, 0], arp: [0, 1, 2, 3, 2, 1, 0, 1, 2, 3, 4, 3, 2, 1, 2, 3], drive: 1.1, snare: true, lead: [7, 0, 8, 7, 0, 5, 0, 3, 0, 0, 1, 0, 3, 0, 0, 0] },
-  warzone: { bpm: 132, root: 36, chords: [[0, 3, 7], [-4, 0, 3], [5, 8, 12], [-5, -1, 2]], bass: [1, 1, 1, 1, 1, 1, 1, 0, 1, 1, 1, 1, 1, 0, 1, 1], arp: [0, 2, 3, 2, 0, 2, 4, 2, 0, 2, 3, 2, 4, 3, 2, 1], drive: 1.3, snare: true, lead: [12, 0, 0, 12, 0, 10, 0, 0, 8, 0, 7, 0, 0, 0, 3, 0] },
+  menu: { bpm: 112, root: 45, chords: [[0, 3, 7], [-4, 0, 3], [-9, -5, -2], [-2, 2, 5]], bass: [0, R, R, 0, R, R, 0, R, 0, R, R, 0, R, 0, R, R], arp: [0, 1, 2, 1, 3, 1, 2, 1, 0, 1, 2, 1, 3, 2, 1, 2], lead: [7, 0, 0, 5, 0, 0, 3, 0, 0, 0, 5, 0, 7, 0, 0, 0], stab: [1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0], drive: 0.55 },
+  neon: { bpm: 140, root: 40, chords: [[0, 3, 7], [-4, 0, 3], [3, 7, 10], [-2, 2, 5]], bass: ROLL, arp: [0, 2, 1, 2, 3, 2, 1, 2, 0, 2, 1, 2, 3, 2, 4, 2], lead: [12, 0, 10, 0, 7, 0, 0, 5, 7, 0, 0, 0, 3, 0, 5, 0], stab: [1, 0, 0, 1, 0, 0, 1, 0, 0, 0, 0, 0, 1, 0, 0, 0], drive: 1 },
+  orbit: { bpm: 136, root: 38, chords: [[0, 3, 7], [-4, 0, 3], [-7, -4, 0], [-1, 2, 5]], bass: OCT, arp: [0, 3, 2, 0, 3, 2, 1, 0, 4, 3, 2, 0, 1, 2, 3, 4], lead: [0, 0, 7, 0, 0, 0, 8, 0, 0, 0, 7, 0, 0, 3, 0, 0], stab: [1, 0, 0, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0, 0, 0, 0], drive: 0.95 },
+  solar: { bpm: 144, root: 42, chords: [[0, 3, 7], [1, 5, 8], [-2, 2, 5], [-4, 0, 3]], bass: GALLOP, arp: [0, 1, 2, 3, 2, 1, 0, 1, 2, 3, 4, 3, 2, 1, 2, 3], lead: [7, 0, 8, 7, 0, 5, 0, 3, 0, 0, 1, 0, 3, 0, 0, 0], stab: [1, 0, 0, 1, 0, 0, 0, 0, 1, 0, 0, 1, 0, 0, 0, 0], drive: 1.1 },
+  warzone: { bpm: 150, root: 36, chords: [[0, 3, 7], [-4, 0, 3], [5, 8, 12], [-5, -1, 2]], bass: ROLL, arp: [0, 2, 3, 2, 0, 2, 4, 2, 0, 2, 3, 2, 4, 3, 2, 1], lead: [12, 0, 0, 12, 0, 10, 0, 0, 8, 0, 7, 0, 0, 0, 3, 0], stab: [1, 0, 1, 0, 0, 1, 0, 0, 1, 0, 1, 0, 0, 1, 0, 0], drive: 1.3 },
+  battle: { bpm: 152, root: 33, chords: [[0, 3, 7], [0, 3, 8], [-2, 2, 5], [-4, 0, 5]], bass: GALLOP, arp: [0, 3, 2, 3, 4, 3, 2, 3, 0, 3, 2, 3, 4, 2, 3, 1], lead: [12, 0, 12, 0, 15, 0, 14, 0, 12, 0, 0, 10, 0, 7, 0, 0], stab: [1, 0, 0, 1, 0, 0, 1, 0, 1, 0, 0, 1, 0, 0, 1, 0], drive: 1.35 },
+  surface: { bpm: 146, root: 31, chords: [[0, 3, 7], [-2, 2, 5], [-4, 0, 3], [1, 5, 8]], bass: OCT, arp: [0, 2, 4, 2, 3, 2, 1, 2, 0, 2, 4, 2, 3, 1, 2, 0], lead: [7, 0, 0, 8, 7, 0, 5, 0, 3, 0, 0, 5, 0, 7, 0, 0], stab: [1, 0, 0, 0, 1, 0, 0, 1, 0, 0, 1, 0, 0, 0, 1, 0], drive: 1.25 },
 };
 
 const mtof = (m: number) => 440 * Math.pow(2, (m - 69) / 12);
@@ -22,6 +35,9 @@ export class AudioEngine {
   private musicBus!: GainNode;
   private sfxBus!: GainNode;
   private delay!: DelayNode;
+  private pump!: GainNode; // side-chained to the kick
+  private shaper!: WaveShaperNode;
+  private intensity = 0.6;
   private noise!: AudioBuffer;
   private vol = { master: 0.8, music: 0.55, sfx: 0.8 };
   // engine voice
@@ -55,6 +71,11 @@ export class AudioEngine {
         const fb = ctx.createGain(); fb.gain.value = 0.36;
         const dl = ctx.createBiquadFilter(); dl.type = 'lowpass'; dl.frequency.value = 2600;
         this.delay.connect(dl); dl.connect(fb); fb.connect(this.delay); dl.connect(this.musicBus);
+        this.pump = ctx.createGain(); this.pump.connect(this.musicBus);
+        this.shaper = ctx.createWaveShaper();
+        const curve = new Float32Array(512);
+        for (let k = 0; k < 512; k++) { const x = (k / 511) * 2 - 1; curve[k] = Math.tanh(x * 2.4); }
+        this.shaper.curve = curve; this.shaper.connect(this.pump);
         const len = ctx.sampleRate * 2;
         this.noise = ctx.createBuffer(1, len, ctx.sampleRate);
         const d = this.noise.getChannelData(0);
@@ -207,6 +228,20 @@ export class AudioEngine {
       case 'deny': this.tone('sawtooth', 140, 100, 0.2, 0.12, this.sfxBus); break;
     }
   }
+  hitConfirm(): void { if (this.gate('hc', 0.05)) this.tone('square', 2300, 1700, 0.04, 0.075, this.sfxBus); }
+  lockWarn(): void { if (this.gate('lw', 0.55)) { this.tone('square', 740, 740, 0.07, 0.07, this.sfxBus); this.tone('square', 620, 620, 0.07, 0.07, this.sfxBus, 0.09); } }
+  /** Faster and higher as the missile closes. */
+  missileWarn(closeness: number): void {
+    if (!this.gate('mw', 0.42 - closeness * 0.3)) return;
+    this.tone('sawtooth', 900 + closeness * 700, 900 + closeness * 700, 0.06, 0.12, this.sfxBus);
+  }
+  flare(): void { if (!this.ready) return; this.burst(0.5, 0.2, 'highpass', 2500, 9000, this.sfxBus); this.tone('sine', 1400, 2800, 0.25, 0.08, this.sfxBus); }
+  bounty(): void { if (!this.ready) return; [1047, 1319, 1568, 2093].forEach((f, i) => this.tone('square', f, f, 0.09, 0.1, this.sfxBus, i * 0.05)); }
+  klaxon(): void {
+    if (!this.ready) return;
+    for (let i = 0; i < 4; i++) this.tone('sawtooth', i % 2 ? 330 : 247, i % 2 ? 330 : 247, 0.3, 0.12, this.sfxBus, i * 0.32);
+    this.burst(2.2, 0.3, 'lowpass', 300, 50, this.sfxBus);
+  }
   victory(): void {
     if (!this.ready) return;
     const seq = [523, 659, 784, 1047, 784, 1047, 1319];
@@ -267,10 +302,13 @@ export class AudioEngine {
     this.song = SONGS[id];
     this.step = 0;
     this.nextT = this.ctx.currentTime + 0.12;
-    this.timer = setInterval(() => this.schedule(), 60);
+    this.timer = setInterval(() => this.schedule(), 50);
   }
 
   stopMusic(): void { this.songId = null; this.stopTimer(); }
+
+  /** 0..1: how hard the track should be hitting right now (final lap, boss in range, ship breaking up). */
+  setIntensity(v: number): void { this.intensity = Math.max(0, Math.min(1, v)); }
 
   private stopTimer(): void { if (this.timer) { clearInterval(this.timer); this.timer = null; } }
 
@@ -279,7 +317,7 @@ export class AudioEngine {
     if (!ctx || !song || ctx.state !== 'running') return;
     const spb = 60 / song.bpm / 4;
     if (this.nextT < ctx.currentTime - 0.5) this.nextT = ctx.currentTime + 0.05; // tab was asleep
-    while (this.nextT < ctx.currentTime + 0.22) {
+    while (this.nextT < ctx.currentTime + 0.2) {
       this.playStep(this.step, this.nextT - ctx.currentTime, song, spb);
       this.step++;
       this.nextT += spb;
@@ -287,48 +325,96 @@ export class AudioEngine {
   }
 
   private playStep(step: number, when: number, song: Song, spb: number): void {
+    const ctx = this.ctx!;
     const s16 = step % 16, bar = Math.floor(step / 16);
     const chord = song.chords[bar % song.chords.length];
-    const section = Math.floor(bar / 8) % 4; // arrangement: build, full, break, full
-    const full = section === 1 || section === 3;
-    const bus = this.musicBus;
+    const hot = this.intensity > 0.85;
+    // arrangement in 8-bar blocks: drive, build, full, breakdown. High intensity stays full.
+    const block = hot ? 2 : Math.floor(bar / 8) % 4;
+    const barIn = bar % 8;
+    const full = block === 2, breakdown = block === 3 && barIn < 4;
+    const bus = this.musicBus, pump = this.pump;
     const d = song.drive;
-    // drums
-    if (s16 % 4 === 0 && section !== 2) { this.tone('sine', 150, 42, 0.22, 0.5 * Math.min(1, d), bus, when, 0.002); }
-    if (song.snare && s16 % 8 === 4 && section !== 0) { this.burst(0.16, 0.2, 'bandpass', 1800, 900, bus, when, 0.8); this.tone('triangle', 220, 140, 0.1, 0.12, bus, when); }
-    if (s16 % 2 === 0 && (full || s16 % 4 === 2)) this.burst(0.035, 0.06, 'highpass', 8000, 8000, bus, when);
-    // bass
-    if (song.bass[s16]) {
-      const n = song.root + chord[0] - (s16 % 8 === 7 ? -12 : 0);
-      this.bassNote(mtof(n), spb * 0.9, 0.2, when);
+    const t = ctx.currentTime + when;
+    // ---- kick: four on the floor, with a click, and it ducks everything on the pump bus
+    if (s16 % 4 === 0 && !breakdown) {
+      this.tone('sine', 175, 44, 0.16, 0.62 * Math.min(1, 0.7 + d * 0.3), bus, when, 0.001);
+      this.burst(0.012, 0.22, 'highpass', 3000, 3000, bus, when);
+      pump.gain.cancelScheduledValues(t);
+      pump.gain.setValueAtTime(0.32, t);
+      pump.gain.linearRampToValueAtTime(1, t + spb * 2.6);
     }
-    // arpeggio (through the delay)
-    if (section !== 0 || bar % 2 === 1) {
+    // ---- gated snare / clap on 2 and 4
+    if (s16 % 8 === 4 && block !== 0 && !breakdown) {
+      this.burst(0.2, 0.3, 'bandpass', 1700, 1300, bus, when, 0.7);
+      this.burst(0.03, 0.2, 'highpass', 5000, 5000, bus, when);
+      this.tone('triangle', 240, 150, 0.09, 0.16, bus, when);
+    }
+    // ---- hats: open on the off-beat, closed sixteenths when the track is cooking
+    if (s16 % 4 === 2) this.burst(0.07, 0.085, 'highpass', 8500, 8500, bus, when);
+    if ((full || this.intensity > 0.5) && s16 % 2 === 1) this.burst(0.022, 0.04 + (s16 % 4 === 3 ? 0.02 : 0), 'highpass', 10000, 10000, bus, when);
+    // ---- fills: tom run and snare roll into the next block, crash on the downbeat
+    if (barIn === 7 && s16 >= 12) this.tone('sine', 220 - (s16 - 12) * 30, 70, 0.14, 0.3, bus, when, 0.002);
+    if (barIn === 7 && block === 1 && s16 >= 8) this.burst(0.05, 0.1 + (s16 - 8) * 0.012, 'bandpass', 1900, 1500, bus, when, 0.8);
+    if (barIn === 0 && s16 === 0 && bar > 0) this.burst(1.3, 0.13, 'highpass', 6000, 3500, bus, when);
+    if (block === 3 && barIn === 3 && s16 === 0) this.burst(spb * 16, 0.1, 'bandpass', 400, 6000, bus, when, 2.5); // riser
+    // ---- rolling bass
+    const bn = song.bass[s16];
+    if (bn !== R && !breakdown) this.bassNote(mtof(song.root + chord[0] + bn), spb * 0.92, 0.26, when);
+    // ---- arpeggio (dry + delay)
+    if (block !== 0 || bar % 2 === 1) {
       const idx = song.arp[s16];
-      const note = song.root + 24 + chord[idx % 3] + (idx >= 3 ? 12 : 0);
-      this.tone('square', mtof(note), mtof(note), spb * 0.8, 0.045, this.delay, when, 0.003);
-      this.tone('square', mtof(note), mtof(note), spb * 0.8, 0.035, bus, when, 0.003);
+      const note = song.root + 24 + chord[idx % 3] + (idx >= 3 ? 12 : 0) + (hot && s16 % 4 === 3 ? 12 : 0);
+      this.tone('square', mtof(note), mtof(note), spb * 0.75, 0.04, this.delay, when, 0.003);
+      this.tone('square', mtof(note) * 1.004, mtof(note), spb * 0.75, 0.034, pump, when, 0.003);
     }
-    // pad on bar starts
-    if (s16 === 0) for (const c of chord) this.padNote(mtof(song.root + 12 + c), spb * 16, 0.035, when);
-    // lead in the full sections
+    // ---- stabs: short detuned chord hits
+    if ((full || breakdown) && song.stab[s16]) {
+      for (const c of chord) {
+        const f = mtof(song.root + 24 + c);
+        this.tone('sawtooth', f, f, spb * 1.6, 0.03, pump, when, 0.004);
+        this.tone('sawtooth', f * 1.008, f, spb * 1.6, 0.026, this.delay, when, 0.004);
+      }
+    }
+    // ---- pad under everything
+    if (s16 === 0) for (const c of chord) this.padNote(mtof(song.root + 12 + c), spb * 16, breakdown ? 0.05 : 0.028, when);
+    // ---- lead line
     if (full && song.lead[s16] && bar % 2 === 0) {
       const note = song.root + 24 + song.lead[s16];
-      this.tone('sawtooth', mtof(note), mtof(note), spb * 1.8, 0.05, this.delay, when, 0.01);
-      this.tone('sawtooth', mtof(note) * 1.005, mtof(note), spb * 1.8, 0.04, bus, when, 0.01);
+      this.leadNote(mtof(note), spb * 1.9, 0.06, when);
     }
   }
 
   private bassNote(f: number, dur: number, vol: number, when: number): void {
     const ctx = this.ctx!;
     const t = ctx.currentTime + when;
-    const o = ctx.createOscillator(), fl = ctx.createBiquadFilter(), g = ctx.createGain();
+    const o = ctx.createOscillator(), o2 = ctx.createOscillator(), fl = ctx.createBiquadFilter(), g = ctx.createGain();
     o.type = 'sawtooth'; o.frequency.value = f;
-    fl.type = 'lowpass'; fl.Q.value = 6;
-    fl.frequency.setValueAtTime(1400, t); fl.frequency.exponentialRampToValueAtTime(180, t + dur);
-    g.gain.setValueAtTime(vol, t); g.gain.exponentialRampToValueAtTime(0.001, t + dur);
-    o.connect(fl); fl.connect(g); g.connect(this.musicBus);
-    o.start(t); o.stop(t + dur + 0.02);
+    o2.type = 'square'; o2.frequency.value = f / 2;
+    fl.type = 'lowpass'; fl.Q.value = 9;
+    fl.frequency.setValueAtTime(2600, t); fl.frequency.exponentialRampToValueAtTime(220, t + dur);
+    g.gain.setValueAtTime(vol, t); g.gain.setValueAtTime(vol, t + dur * 0.5); g.gain.exponentialRampToValueAtTime(0.001, t + dur);
+    o.connect(fl); o2.connect(fl); fl.connect(g); g.connect(this.shaper);
+    o.start(t); o.stop(t + dur + 0.02); o2.start(t); o2.stop(t + dur + 0.02);
+  }
+
+  private leadNote(f: number, dur: number, vol: number, when: number): void {
+    const ctx = this.ctx!;
+    const t = ctx.currentTime + when;
+    const g = ctx.createGain();
+    g.gain.setValueAtTime(0.0001, t);
+    g.gain.exponentialRampToValueAtTime(vol, t + 0.015);
+    g.gain.exponentialRampToValueAtTime(0.0001, t + dur);
+    const lfo = ctx.createOscillator(), lg = ctx.createGain();
+    lfo.frequency.value = 6; lg.gain.value = f * 0.008; lfo.connect(lg);
+    for (const det of [-7, 7]) {
+      const o = ctx.createOscillator();
+      o.type = 'sawtooth'; o.frequency.value = f; o.detune.value = det;
+      lg.connect(o.frequency);
+      o.connect(g); o.start(t); o.stop(t + dur + 0.03);
+    }
+    lfo.start(t); lfo.stop(t + dur + 0.03);
+    g.connect(this.delay); g.connect(this.musicBus);
   }
 
   private padNote(f: number, dur: number, vol: number, when: number): void {
@@ -344,7 +430,7 @@ export class AudioEngine {
       o.type = 'sawtooth'; o.frequency.value = f; o.detune.value = det;
       o.connect(fl); o.start(t); o.stop(t + dur + 0.05);
     }
-    fl.connect(g); g.connect(this.musicBus);
+    fl.connect(g); g.connect(this.pump);
   }
 
   dispose(): void {
