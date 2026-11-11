@@ -1,5 +1,5 @@
 import type { TrackId } from '../data/campaign';
-import { DEAD_ORBIT, NEON_FRONTIER, SOLAR_SCAR, WARZONE_ZERO } from './defs';
+import { ARENA, DEAD_ORBIT, HULK, NEON_FRONTIER, SOLAR_SCAR, WARZONE_ZERO } from './defs';
 import { buildTrack, type Track, type TrackDef } from './track';
 
 export const TRACK_DEFS: Record<TrackId, TrackDef> = {
@@ -7,6 +7,8 @@ export const TRACK_DEFS: Record<TrackId, TrackDef> = {
   orbit: DEAD_ORBIT,
   solar: SOLAR_SCAR,
   warzone: WARZONE_ZERO,
+  hulk: HULK,
+  arena: ARENA,
 };
 
 const cache = new Map<TrackId, Track>();

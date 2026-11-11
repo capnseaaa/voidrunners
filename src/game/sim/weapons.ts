@@ -10,6 +10,7 @@ export class Projectile {
   px = 0; py = 0; pz = 0; // previous position (swept collision + trail rendering)
   vx = 0; vy = 0; vz = 0;
   speed = 0;
+  maxSpeed = 340; turn = 3.4; // missiles
   life = 0;
   damage = 0;
   tKind = 0; tIdx = -1; // homing target (1 ship, 2 capital component)

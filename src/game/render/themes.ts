@@ -1,6 +1,6 @@
 // Per-track colour and atmosphere settings shared by the track mesh,
 // environment and capital ship builders.
-import type { TrackId } from '../data/campaign';
+import type { ThemeId } from '../data/campaign';
 
 export interface Theme {
   road: string; roadLine: string; rail: number; railAlt: number; gate: number;
@@ -12,7 +12,7 @@ export interface Theme {
   pad: number;
 }
 
-export const THEMES: Record<TrackId, Theme> = {
+export const THEMES: Record<ThemeId, Theme> = {
   neon: {
     road: '#0b0f24', roadLine: '#00e5ff', rail: 0x00e5ff, railAlt: 0xff2bd6, gate: 0xff2bd6,
     skyTop: 0x05021a, skyBottom: 0x2a0a4a, nebulaA: 0x1238a8, nebulaB: 0xc01890, stars: 1,

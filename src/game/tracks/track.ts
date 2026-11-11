@@ -41,6 +41,8 @@ export interface TrackDef {
   pads: PadDef[];
   capital: CapitalPlacement;
   checkpoints: number;
+  /** Open-space arena: ships fly freely inside this radius instead of following the ribbon. */
+  arenaRadius?: number;
 }
 
 export interface Sample {
@@ -82,6 +84,7 @@ export interface Track {
   checkpoints: Checkpoint[];
   capitalFromS: number;
   capitalToS: number;
+  arena: number; // free-flight radius, 0 for circuits
 }
 
 const UP = new Vector3(0, 1, 0);
@@ -201,7 +204,7 @@ export function buildTrack(def: TrackDef): Track {
     paths.push(path);
   });
 
-  const track: Track = { def, paths, main, length: main.length, checkpoints: [], capitalFromS: 0, capitalToS: 0 };
+  const track: Track = { def, paths, main, length: main.length, checkpoints: [], capitalFromS: 0, capitalToS: 0, arena: def.arenaRadius ?? 0 };
 
   // fork / merge overlap extents
   for (let p = 1; p < paths.length; p++) {

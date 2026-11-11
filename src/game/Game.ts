@@ -81,7 +81,7 @@ export class Game {
     this.ro = new ResizeObserver(() => this.resize());
     this.ro.observe(canvas.parentElement ?? canvas);
     this.resize();
-    audio.playMusic(opts.race.track);
+    audio.playMusic(opts.race.theme);
     audio.startEngine();
     this.publishHud(true);
   }
@@ -225,6 +225,7 @@ export class Game {
       salvage: Math.round(p.salvage), deaths: p.deaths, racerKills: p.racerKills, racerDamage: p.racerDamage,
       capitalDamage: p.capitalDamage, capitalTotalDamage: cap.totalDamage, capitalKills: p.capitalKills,
       capitalDestroyed: cap.destroyed, capitalKillBonus: p.capitalKillBonus,
+      droneKills: p.droneKills, score: Math.round(p.score),
     };
     const rewards = computeRewards(sim.race, outcome);
     const contributions = sim.ships.map((s) => ({

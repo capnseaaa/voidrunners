@@ -2,7 +2,7 @@
 import type { TrackDef } from './track';
 
 export const NEON_FRONTIER: TrackDef = {
-  id: 'neon', name: 'NEON FRONTIER', scale: 0.94, yScale: 1, step: 6, checkpoints: 10,
+  id: 'neon', name: 'NEON FRONTIER', scale: 0.52, yScale: 0.6, step: 6, checkpoints: 10,
   main: [
     [0, 0, 0, 24], [500, 0, 0, 24], [1000, 10, 0, 24], [1400, 30, 150, 22], [1550, 50, 500, 20],
     [1400, 40, 850, 20], [1000, 10, 950, 18], [700, -10, 800, 18], [400, -20, 1000, 20], [100, -30, 1250, 22],
@@ -27,7 +27,7 @@ export const NEON_FRONTIER: TrackDef = {
 };
 
 export const DEAD_ORBIT: TrackDef = {
-  id: 'orbit', name: 'DEAD ORBIT', scale: 1.22, yScale: 1.2, step: 6, checkpoints: 10,
+  id: 'orbit', name: 'DEAD ORBIT', scale: 0.66, yScale: 0.7, step: 6, checkpoints: 10,
   main: [
     [0, 0, 0, 21], [500, 0, 0, 21], [950, 30, -150, 19], [1300, 80, -500, 17], [1250, 120, -950, 17],
     [900, 90, -1250, 17], [450, 40, -1150, 18], [150, 0, -850, 17], [-250, -40, -950, 17], [-600, -80, -1300, 18],
@@ -50,7 +50,7 @@ export const DEAD_ORBIT: TrackDef = {
 };
 
 export const SOLAR_SCAR: TrackDef = {
-  id: 'solar', name: 'SOLAR SCAR', scale: 1.28, yScale: 1, step: 6, checkpoints: 10,
+  id: 'solar', name: 'SOLAR SCAR', scale: 0.68, yScale: 0.6, step: 6, checkpoints: 10,
   main: [
     [-1100, 10, 900, 24], [-1000, 20, 300, 24], [-600, 30, 20, 24], [0, 30, 0, 27], [700, 30, 0, 29],
     [1400, 30, 100, 29], [1900, 20, 400, 26], [2000, 0, 900, 24], [1700, -20, 1300, 20], [1300, -40, 1200, 17],
@@ -73,7 +73,7 @@ export const SOLAR_SCAR: TrackDef = {
 };
 
 export const WARZONE_ZERO: TrackDef = {
-  id: 'warzone', name: 'WARZONE ZERO', scale: 1.2, yScale: 1.1, step: 6, checkpoints: 10,
+  id: 'warzone', name: 'WARZONE ZERO', scale: 0.62, yScale: 0.65, step: 6, checkpoints: 10,
   main: [
     [0, 0, 0, 28], [700, 20, 0, 28], [1400, 60, -200, 28], [2000, 100, -700, 26], [2100, 60, -1300, 26],
     [1700, 0, -1750, 24], [1100, -40, -1700, 24], [800, -60, -1300, 22], [400, -40, -1500, 22], [0, 0, -1900, 24],
@@ -93,4 +93,46 @@ export const WARZONE_ZERO: TrackDef = {
     { path: 1, at: 0.3, d: 0 }, { path: 1, at: 0.62, d: 0 }, { path: 2, at: 0.5, d: 0 },
   ],
   capital: { from: 11.4, to: 13.4, side: 1, dist: 130, height: 60 },
+};
+
+// A circuit laid across the hull of a colossal battleship: flight deck, bow gun
+// deck, a maintenance tunnel, the main hangar, a leap across a gap in the hull
+// and a pass around the engine block. "breakA"/"breakB" stretches of deck are
+// blown away as the ship dies (laps 2 and 3); racers hover across the holes.
+export const HULK: TrackDef = {
+  id: 'hulk', name: 'BATTLESHIP SURFACE', scale: 0.86, yScale: 0.7, step: 6, checkpoints: 10,
+  main: [
+    [-800, 0, 350, 28], [-200, 0, 350, 28], [500, 0, 350, 28], [1100, 8, 330, 24], [1500, 25, 200, 20],
+    [1600, 30, -50, 20], [1450, 20, -300, 20], [1050, 5, -380, 18], [500, -15, -350, 18], [0, -20, -400, 22],
+    [-500, -15, -350, 24], [-1000, 0, -380, 22], [-1400, 10, -250, 20], [-1550, 15, 50, 20], [-1350, 5, 300, 22],
+  ],
+  branches: [
+    { name: 'Forward Gun Deck', kind: 'shortcut', from: 3, to: 6, hw: 10, points: [[1310, 10, 150], [1390, 12, -110]] },
+    { name: 'Engine Trench', kind: 'risky', from: 11, to: 14, hw: 12, points: [[-1200, -25, -150], [-1280, -25, 100]] },
+  ],
+  sections: [
+    { from: 1.5, to: 1.63, kind: 'breakA' }, { from: 4.42, to: 4.56, kind: 'breakB' }, { from: 12.42, to: 12.56, kind: 'breakB' },
+    { from: 10.72, to: 10.9, kind: 'gap' },
+    { from: 6.6, to: 8.5, kind: 'tunnel' }, { from: 8.5, to: 10.4, kind: 'hangar' },
+    { from: 0, to: 3, kind: 'deck' }, { from: 3, to: 6.6, kind: 'bow' }, { from: 10.4, to: 12, kind: 'stern' }, { from: 12, to: 14, kind: 'engines' }, { from: 14, to: 15, kind: 'deck' },
+  ],
+  pads: [
+    { path: 0, at: 0.9, d: 0.4 }, { path: 0, at: 2.2, d: -0.4 }, { path: 0, at: 5.2, d: 0 }, { path: 0, at: 7.4, d: 0 },
+    { path: 0, at: 9.2, d: 0.5 }, { path: 0, at: 10.55, d: 0 }, { path: 0, at: 13.3, d: 0 }, { path: 0, at: 14.5, d: -0.3 },
+    { path: 1, at: 0.5, d: 0 }, { path: 2, at: 0.35, d: 0 }, { path: 2, at: 0.65, d: 0 },
+  ],
+  capital: { from: 0.5, to: 2.6, side: 1, dist: 150, height: 45 },
+};
+
+// Open-space battle zone. The ring is only a reference line (drops and the capital
+// ship are placed relative to it); ships fly freely inside arenaRadius.
+const RING = 520;
+export const ARENA: TrackDef = {
+  id: 'arena', name: 'BATTLE ZONE', scale: 1, yScale: 1, step: 6, checkpoints: 4,
+  main: Array.from({ length: 12 }, (_, i) => [Math.cos((i / 12) * Math.PI * 2) * RING, 0, Math.sin((i / 12) * Math.PI * 2) * RING, 40]),
+  branches: [],
+  sections: [{ from: 0, to: 12, kind: 'open' }],
+  pads: [],
+  capital: { from: 1, to: 5, side: -1, dist: 150, height: 62 },
+  arenaRadius: 1150,
 };

@@ -4,7 +4,7 @@ import { MAX_UPGRADE_LEVEL, PLAYER_SHIPS, UPGRADE_CATEGORIES, upgradeCost, ZERO_
 import type { RewardBreakdown, RaceOutcome } from '../data/rewards';
 
 export const SAVE_KEY = 'voidrunners.save';
-export const SAVE_VERSION = 2;
+export const SAVE_VERSION = 3;
 
 export type Quality = 'low' | 'medium' | 'high';
 
@@ -15,6 +15,11 @@ export interface Settings {
   sfxVolume: number;
   cameraShake: boolean;
   showMinimap: boolean;
+  touchControls: 'auto' | 'on' | 'off';
+  gyro: boolean; // steer by tilting the device
+  gyroSensitivity: number; // 0.4 .. 2.5
+  gyroZero: number; // calibrated neutral tilt, degrees
+  autoThrottle: boolean; // touch: accelerate unless braking
 }
 
 export interface RaceRecord {
@@ -24,6 +29,7 @@ export interface RaceRecord {
   bestTime: number; // 0 = none
   bestLap: number; // 0 = none
   bestShip: string;
+  bestScore: number; // battle events
 }
 
 export interface SaveData {
@@ -45,7 +51,7 @@ export interface StorageLike {
 }
 
 export function defaultSettings(): Settings {
-  return { quality: 'medium', masterVolume: 0.8, musicVolume: 0.55, sfxVolume: 0.8, cameraShake: true, showMinimap: true };
+  return { quality: 'medium', masterVolume: 0.8, musicVolume: 0.55, sfxVolume: 0.8, cameraShake: true, showMinimap: true, touchControls: 'auto', gyro: false, gyroSensitivity: 1, gyroZero: 0, autoThrottle: true };
 }
 
 export function defaultSave(): SaveData {
@@ -98,6 +104,7 @@ export function sanitizeSave(raw: unknown): SaveData {
           bestTime: num(rr.bestTime, 0),
           bestLap: num(rr.bestLap, 0),
           bestShip: typeof rr.bestShip === 'string' ? rr.bestShip : '',
+          bestScore: Math.floor(num(rr.bestScore, 0)),
         };
       }
     }
@@ -113,6 +120,11 @@ export function sanitizeSave(raw: unknown): SaveData {
     d.settings.sfxVolume = num(s.sfxVolume, d.settings.sfxVolume, 0, 1);
     if (typeof s.cameraShake === 'boolean') d.settings.cameraShake = s.cameraShake;
     if (typeof s.showMinimap === 'boolean') d.settings.showMinimap = s.showMinimap;
+    if (s.touchControls === 'auto' || s.touchControls === 'on' || s.touchControls === 'off') d.settings.touchControls = s.touchControls;
+    if (typeof s.gyro === 'boolean') d.settings.gyro = s.gyro;
+    d.settings.gyroSensitivity = num(s.gyroSensitivity, 1, 0.4, 2.5);
+    d.settings.gyroZero = num(s.gyroZero, 0, -60, 60);
+    if (typeof s.autoThrottle === 'boolean') d.settings.autoThrottle = s.autoThrottle;
   }
   return d;
 }
@@ -130,6 +142,19 @@ export function migrateSave(raw: any): unknown {
     // v1 had a single "volume" setting.
     if (data.settings && typeof data.settings.volume === 'number' && data.settings.masterVolume === undefined) {
       data = { ...data, settings: { ...data.settings, masterVolume: data.settings.volume } };
+    }
+  }
+  if (v < 3) {
+    // v3 inserted new events (battles, surface races) between existing races. Anyone who had
+    // already progressed past such a slot keeps their progress: the new event counts as cleared.
+    if (data.races && typeof data.races === 'object') {
+      const races = { ...data.races };
+      let furthest = -1;
+      RACES.forEach((r, i) => { if (races[r.id]?.completed || races[r.id]?.attempts) furthest = i; });
+      RACES.forEach((r, i) => {
+        if (i < furthest && !races[r.id]) races[r.id] = { completed: true, attempts: 0, bestPosition: 0, bestTime: 0, bestLap: 0, bestShip: '', bestScore: 0 };
+      });
+      data = { ...data, races };
     }
   }
   return { ...data, version: SAVE_VERSION };
@@ -183,7 +208,8 @@ export function isRaceUnlocked(save: SaveData, race: RaceDef): boolean {
 }
 
 export function isStageUnlocked(save: SaveData, stage: number): boolean {
-  return isRaceUnlocked(save, RACES[stage * 3]);
+  const first = RACES.find((r) => r.stage === stage);
+  return !!first && isRaceUnlocked(save, first);
 }
 
 export function nextRace(race: RaceDef): RaceDef | null {
@@ -227,13 +253,14 @@ export function buyUpgrade(save: SaveData, shipId: string, cat: UpgradeCategory)
 
 /** Fold a finished race into the save: currencies, records, unlock flags, totals. */
 export function applyRaceResult(save: SaveData, race: RaceDef, shipId: string, o: RaceOutcome, rw: RewardBreakdown): SaveData {
-  const prev: RaceRecord = save.races[race.id] ?? { completed: false, attempts: 0, bestPosition: 0, bestTime: 0, bestLap: 0, bestShip: '' };
+  const prev: RaceRecord = save.races[race.id] ?? { completed: false, attempts: 0, bestPosition: 0, bestTime: 0, bestLap: 0, bestShip: '', bestScore: 0 };
   const rec: RaceRecord = { ...prev, attempts: prev.attempts + 1 };
   if (o.finished) {
     if (rec.bestPosition === 0 || o.position < rec.bestPosition) rec.bestPosition = o.position;
     if (rec.bestTime === 0 || o.time < rec.bestTime) { rec.bestTime = o.time; rec.bestShip = shipId; }
   }
   if (o.bestLap > 0 && (rec.bestLap === 0 || o.bestLap < rec.bestLap)) rec.bestLap = o.bestLap;
+  if (o.score > (rec.bestScore || 0)) rec.bestScore = Math.round(o.score);
   if (rw.unlockedNext) rec.completed = true;
   return {
     ...save,

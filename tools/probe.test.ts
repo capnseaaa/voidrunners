@@ -27,10 +27,10 @@ test('probe', () => {
       }
       sim.events.clear();
     }
-    console.log(`\n=== ${id} ${race.track} phase=${sim.phase} time=${sim.time.toFixed(1)} capital ${(100 * (1 - sim.capital.hp / sim.capital.maxHp)).toFixed(0)}% destroyed=${sim.capital.destroyed}`);
+    console.log(`\n=== ${id} ${race.track} phase=${sim.phase} time=${sim.time.toFixed(1)} capital ${(100 * (1 - sim.capital.hp / sim.capital.maxHp)).toFixed(0)}% destroyed=${sim.capital.destroyed} warPhase=${sim.warPhase} dronesKilled=${sim.drones.killed}`);
     for (const idx of sim.order) {
       const s = sim.ships[idx];
-      console.log(`${String(s.finishPos).padStart(2)} ${s.name.padEnd(10)} t=${s.finishTime.toFixed(1)} best=${s.bestLap.toFixed(1)} dnf=${s.dnf} deaths=${s.deaths} salv=${s.salvage.toFixed(0)} rdmg=${s.racerDamage.toFixed(0)} kills=${s.racerKills} cap=${s.capitalDamage.toFixed(0)} ck=${s.capitalKills} mis=${s.missiles} walls=${walls[s.index]} envD=${envDeaths[s.index]}`);
+      console.log(`${String(s.finishPos).padStart(2)} ${s.name.padEnd(10)} t=${s.finishTime.toFixed(1)} best=${s.bestLap.toFixed(1)} dnf=${s.dnf} deaths=${s.deaths} salv=${s.salvage.toFixed(0)} rdmg=${s.racerDamage.toFixed(0)} kills=${s.racerKills} cap=${s.capitalDamage.toFixed(0)} ck=${s.capitalKills} dk=${s.droneKills} sc=${s.score.toFixed(0)} mis=${s.missiles} walls=${walls[s.index]} envD=${envDeaths[s.index]}`);
     }
     console.log(capLog.join(' | '));
     console.log(JSON.stringify(evc), 'hardWalls', hardWalls);

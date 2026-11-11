@@ -18,8 +18,12 @@ export interface Obstacle {
   hp: number; maxHp: number; // maxHp 0 = indestructible
   alive: boolean; respawnT: number; respawnDelay: number;
   speed: number; // along-path motion (traffic)
-  amp: number; freq: number; phase: number; // lateral drift
+  amp: number; freq: number; phaseOff: number; // lateral drift
   period: number; timer: number; active: boolean; // vents
+  phase: number; // war phase at which this hazard appears (surface races); 0 = from the start
+  dormant: boolean; // not in play yet (waiting for its phase, or a spare debris slot)
+  slot: boolean; // spare slot for capital ship wreckage falling onto the route
+  ttl: number; // >0: temporary hazard, removed when it runs out
   seed: number;
 }
 
@@ -72,7 +76,7 @@ export function buildLayout(track: Track, race: RaceDef): Layout {
   }
 
   // main-line exclusion zones (progress ranges) where no hazards are placed
-  const zones: [number, number][] = [[L - 300, L + 1], [-1, 220]];
+  const zones: [number, number][] = [[L - 260, L + 1], [-1, 180]];
   for (let i = 1; i < track.paths.length; i++) {
     const b = track.paths[i];
     const fromS = main.samples[b.fromIdx].s, toS = main.samples[b.toIdx].s;
@@ -90,7 +94,8 @@ export function buildLayout(track: Track, race: RaceDef): Layout {
     const o: Obstacle = {
       id: oid++, kind, path, s, d, baseS: s, baseD: d, x: tmp.x, y: tmp.y, z: tmp.z, r,
       solid: kind !== 'vent', hp: 0, maxHp: 0, alive: true, respawnT: 0, respawnDelay: 30,
-      speed: 0, amp: 0, freq: 0, phase: rng.range(0, 6.28), period: 0, timer: 0, active: false, seed: rng.next(),
+      speed: 0, amp: 0, freq: 0, phaseOff: rng.range(0, 6.28), period: 0, timer: 0, active: false, seed: rng.next(),
+      phase: 0, dormant: false, slot: false, ttl: 0,
     };
     if (kind === 'traffic') { o.maxHp = 40; o.speed = rng.range(28, 44); o.respawnDelay = 18; }
     if (kind === 'asteroid') { o.maxHp = 30 + r * 10; o.respawnDelay = 45; }
@@ -102,7 +107,7 @@ export function buildLayout(track: Track, race: RaceDef): Layout {
     return o;
   };
 
-  const placeOnMain = (kind: ObstacleKind, count: number, rMin: number, rMax: number, filter?: (sec: string) => boolean): void => {
+  const placeOnMain = (kind: ObstacleKind, count: number, rMin: number, rMax: number, filter?: (sec: string) => boolean, phase = 0): void => {
     let placed = 0, tries = 0;
     while (placed < count && tries < count * 40) {
       tries++;
@@ -115,6 +120,7 @@ export function buildLayout(track: Track, race: RaceDef): Layout {
       const room = smp.hw - r - 1.5;
       const d = rng.range(-room, room);
       const o = addObstacle(kind, 0, s, d, r);
+      if (phase > 0) { o.phase = phase; o.dormant = true; o.alive = false; }
       if (kind === 'asteroid' && rng.chance(0.4)) { o.amp = Math.min(room - Math.abs(d), rng.range(4, 10)); o.freq = rng.range(0.25, 0.6); }
       placed++;
     }
@@ -123,26 +129,40 @@ export function buildLayout(track: Track, race: RaceDef): Layout {
   const hz = race.hazard;
   switch (track.def.id) {
     case 'neon':
-      placeOnMain('pylon', Math.round(10 * hz), 2.2, 2.8);
-      placeOnMain('traffic', Math.round(13 * hz), 3.2, 3.6);
+      placeOnMain('pylon', Math.round(6 * hz), 2.2, 2.8);
+      placeOnMain('traffic', Math.round(8 * hz), 3.2, 3.6);
       break;
     case 'orbit':
-      placeOnMain('asteroid', Math.round(30 * hz), 3, 6.5);
-      placeOnMain('debris', Math.round(8 * hz), 3, 4.5, (s) => s === 'wreck' || s === 'dense');
+      placeOnMain('asteroid', Math.round(18 * hz), 3, 6.5);
+      placeOnMain('debris', Math.round(5 * hz), 3, 4.5, (s) => s === 'wreck' || s === 'dense');
       break;
     case 'solar':
-      placeOnMain('rock', Math.round(15 * hz), 3, 4.2);
-      placeOnMain('vent', Math.round(11 * hz), 6, 7);
+      placeOnMain('rock', Math.round(9 * hz), 3, 4.2);
+      placeOnMain('vent', Math.round(7 * hz), 6, 7);
       break;
     case 'warzone':
-      placeOnMain('debris', Math.round(18 * hz), 3, 5);
-      placeOnMain('mine', Math.round(15 * hz), 2, 2);
+      placeOnMain('debris', Math.round(11 * hz), 3, 5);
+      placeOnMain('mine', Math.round(9 * hz), 2, 2);
       break;
+    case 'hulk': {
+      const open = (sec: string) => sec === 'deck' || sec === 'bow' || sec === 'stern';
+      placeOnMain('pylon', Math.round(8 * hz), 2.2, 2.8, open); // antenna masts
+      placeOnMain('vent', 4, 5.5, 6.5, (sec) => sec === 'engines'); // engine exhaust ports
+      placeOnMain('traffic', 3, 3.2, 3.6, (sec) => sec === 'hangar' || sec === 'deck'); // deck tugs
+      if (race.dying) {
+        // the ship comes apart: wreckage and deck fires appear lap by lap
+        placeOnMain('debris', 6, 3, 4.5, undefined, 1);
+        placeOnMain('vent', 4, 5, 6, undefined, 1);
+        placeOnMain('debris', 7, 3, 5, undefined, 2);
+        placeOnMain('vent', 5, 5, 6.5, undefined, 2);
+      }
+      break;
+    }
   }
 
   // Branch hazards: alternating-side blockers so there is always a clear lane.
   const branchKind: Record<string, ObstacleKind[]> = {
-    neon: ['pylon', 'traffic'], orbit: ['asteroid', 'asteroid'], solar: ['rock', 'vent'], warzone: ['debris', 'mine'],
+    neon: ['pylon', 'traffic'], orbit: ['asteroid', 'asteroid'], solar: ['rock', 'vent'], warzone: ['debris', 'mine'], hulk: ['pylon', 'vent'],
   };
   for (let i = 1; i < track.paths.length; i++) {
     const b = track.paths[i];
@@ -159,6 +179,14 @@ export function buildLayout(track: Track, race: RaceDef): Layout {
       addObstacle(kind, i, s, side * hw * 0.48, r);
       side = -side;
     }
+  }
+
+  // spare wreckage slots under the capital ship: activated when its systems are shot off
+  for (let k = 0; k < 8; k++) {
+    const ss = track.capitalFromS + ((track.capitalToS - track.capitalFromS) * (k + 0.5)) / 8;
+    const hw = hwAt(main, ss);
+    const o = addObstacle('debris', 0, ss, rng.range(-(hw - 6), hw - 6), rng.range(3, 4.4));
+    o.slot = true; o.dormant = true; o.alive = false; o.maxHp = 60; o.hp = 60;
   }
 
   // ------------------------------------------------------------- pickups
@@ -181,7 +209,7 @@ export function buildLayout(track: Track, race: RaceDef): Layout {
       for (let k = -1; k <= 1; k++) { const dd = Math.max(-(hw - 4), Math.min(hw - 4, d0 + k * 7)); if (!blocked(s, dd)) addPickup('scrap', 1, 0, s, dd); }
     }
     cluster++;
-    s += rng.range(230, 330);
+    s += rng.range(170, 250);
   }
   for (const p of pickups) if (p.kind === 'core') p.value = 3;
   for (let i = 1; i < track.paths.length; i++) {
@@ -198,4 +226,41 @@ export function buildLayout(track: Track, race: RaceDef): Layout {
     }
   }
   return { pads, obstacles, pickups };
+}
+
+/** Layout for open-space battle zones: free-floating rocks, wreckage and salvage. */
+export function buildArenaLayout(track: Track, race: RaceDef): Layout {
+  const rng = new Rng(race.seed);
+  const R = track.arena;
+  const obstacles: Obstacle[] = [];
+  const pickups: Pickup[] = [];
+  const kinds: ObstacleKind[] = race.theme === 'orbit' || race.theme === 'solar' ? ['asteroid', 'asteroid', 'debris'] : ['debris', 'debris', 'mine'];
+  let id = 0;
+  for (let i = 0; i < 46; i++) {
+    const a = rng.range(0, 6.283), r = Math.sqrt(rng.range(0.03, 0.88)) * R;
+    const x = Math.cos(a) * r, z = Math.sin(a) * r;
+    if (z < -R * 0.62 && Math.abs(x) < 220) continue; // keep the launch corridor clear
+    if (obstacles.some((o) => Math.hypot(o.x - x, o.z - z) < 45)) continue;
+    const kind = rng.pick(kinds);
+    const rad = kind === 'mine' ? 2 : rng.range(3, 7);
+    const o: Obstacle = {
+      id: id++, kind, path: 0, s: 0, d: 0, baseS: 0, baseD: 0, x, y: 0, z, r: rad, solid: true,
+      hp: kind === 'mine' ? 10 : 40 + rad * 10, maxHp: kind === 'mine' ? 10 : 40 + rad * 10, alive: true, respawnT: 0, respawnDelay: 40,
+      speed: 0, amp: 0, freq: 0, phaseOff: 0, period: 0, timer: 0, active: false, seed: rng.next(), phase: 0, dormant: false, slot: false, ttl: 0,
+    };
+    obstacles.push(o);
+  }
+  for (let c = 0; c < 26; c++) {
+    const a = rng.range(0, 6.283), r = Math.sqrt(rng.range(0.02, 0.8)) * R;
+    const cx = Math.cos(a) * r, cz = Math.sin(a) * r;
+    const dir = rng.range(0, 6.283);
+    const core = rng.chance(0.25);
+    for (let k = 0; k < 4; k++) {
+      const x = cx + Math.cos(dir) * k * 10, z = cz + Math.sin(dir) * k * 10;
+      if (obstacles.some((o) => Math.hypot(o.x - x, o.z - z) < o.r + 6)) continue;
+      pickups.push(makePickup(c % 8 === 3 ? 'missile' : core && k === 3 ? 'core' : 'scrap', c % 8 === 3 ? 2 : core && k === 3 ? 3 : 1, 0, 0, 0, x, 1.7, z));
+      if (c % 8 === 3) break;
+    }
+  }
+  return { pads: [], obstacles, pickups };
 }

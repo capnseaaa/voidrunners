@@ -92,6 +92,12 @@ export interface Personality {
   riskBias: number; // 0..1 probability weight for risky routes
   capitalBias: number; // 0..1 focus on capital ship targets
   boostUse: number; // 0..1 how eagerly boost is spent
+  caution: number; // 0..1 backs off, weaves and protects itself when hurt or under fire
+  ram: number; // 0..1 shoulders neighbours aside
+  nerve: number; // 0..1 carries speed into corners, boosts where others would not
+  erratic: number; // 0..1 twitchy: random swerves, panic boosts and wild shooting
+  gunnery: number; // 0..1 marksmanship against small moving targets
+  style: string; // one-word racing style shown to the player
 }
 
 export interface AiRacerDef {
@@ -112,55 +118,55 @@ export const AI_RACERS: AiRacerDef[] = [
     id: 'ace', name: 'ACE', tagline: 'Aggressive and fast',
     ship: aiShip('ace', 'Stiletto', 'stiletto', { primary: 0xf5f5ff, secondary: 0xe01030, glow: 0xff5030 }, 'burst',
       { topSpeed: 121, accel: 59, turnRate: 1.68, armour: 92, shield: 55, mass: 0.85 }),
-    personality: { skill: 0.97, aggression: 0.7, mistakeRate: 0.35, salvageBias: 0.15, shortcutBias: 0.55, riskBias: 0.4, capitalBias: 0.3, boostUse: 0.95 },
+    personality: { skill: 0.97, aggression: 0.7, mistakeRate: 0.35, salvageBias: 0.15, shortcutBias: 0.55, riskBias: 0.4, capitalBias: 0.3, boostUse: 0.95, caution: 0.3, ram: 0.2, nerve: 0.9, erratic: 0.05, gunnery: 0.75, style: 'ATTACKER' },
   },
   {
     id: 'rookie', name: 'ROOKIE', tagline: 'Inexperienced, makes mistakes',
     ship: aiShip('rookie', 'Puddlejumper', 'puddle', { primary: 0xffe040, secondary: 0x3d6bff, glow: 0x9be8ff }, 'burst',
       { topSpeed: 113, accel: 47, turnRate: 1.55, armour: 105, shield: 60 }),
-    personality: { skill: 0.72, aggression: 0.2, mistakeRate: 4.2, salvageBias: 0.3, shortcutBias: 0.2, riskBias: 0.25, capitalBias: 0.25, boostUse: 0.45 },
+    personality: { skill: 0.72, aggression: 0.2, mistakeRate: 4.2, salvageBias: 0.3, shortcutBias: 0.2, riskBias: 0.25, capitalBias: 0.25, boostUse: 0.45, caution: 0.6, ram: 0.05, nerve: 0.3, erratic: 0.8, gunnery: 0.2, style: 'NERVOUS' },
   },
   {
     id: 'tank', name: 'TANK', tagline: 'Durable and heavily armed',
     ship: aiShip('tank', 'Ironclad', 'ironclad', { primary: 0x5c6b3a, secondary: 0x2b2f24, glow: 0xff8a20 }, 'bulwark',
       { topSpeed: 112, accel: 41, turnRate: 1.38, grip: 6.4, armour: 185, shield: 100, weaponDamage: 9.5, missiles: 9, mass: 1.7 }),
-    personality: { skill: 0.86, aggression: 0.6, mistakeRate: 0.7, salvageBias: 0.15, shortcutBias: 0.15, riskBias: 0.2, capitalBias: 0.6, boostUse: 0.7 },
+    personality: { skill: 0.86, aggression: 0.6, mistakeRate: 0.7, salvageBias: 0.15, shortcutBias: 0.15, riskBias: 0.2, capitalBias: 0.6, boostUse: 0.7, caution: 0.85, ram: 0.9, nerve: 0.3, erratic: 0, gunnery: 0.7, style: 'BRAWLER' },
   },
   {
     id: 'scavenger', name: 'SCAVENGER', tagline: 'Prioritises salvage',
     ship: aiShip('scavenger', 'Magpie', 'magpie', { primary: 0xb8651e, secondary: 0x2ad0c0, glow: 0x60ffb0 }, 'magnet',
       { topSpeed: 115, accel: 50, turnRate: 1.72, armour: 112, shield: 70, salvageMult: 1.6, mass: 1.05 }),
-    personality: { skill: 0.85, aggression: 0.2, mistakeRate: 0.9, salvageBias: 1, shortcutBias: 0.3, riskBias: 0.5, capitalBias: 0.35, boostUse: 0.6 },
+    personality: { skill: 0.85, aggression: 0.2, mistakeRate: 0.9, salvageBias: 1, shortcutBias: 0.3, riskBias: 0.5, capitalBias: 0.35, boostUse: 0.6, caution: 0.7, ram: 0, nerve: 0.4, erratic: 0.1, gunnery: 0.4, style: 'SCAVENGER' },
   },
   {
     id: 'ghost', name: 'GHOST', tagline: 'Takes shortcuts',
     ship: aiShip('ghost', 'Wraith', 'wraith', { primary: 0xc8d4e8, secondary: 0x202838, glow: 0x9ad0ff }, 'dash',
       { topSpeed: 114, accel: 55, turnRate: 2.05, grip: 7.6, armour: 86, shield: 56, mass: 0.85 }),
-    personality: { skill: 0.9, aggression: 0.25, mistakeRate: 0.6, salvageBias: 0.2, shortcutBias: 1, riskBias: 0.35, capitalBias: 0.2, boostUse: 0.8 },
+    personality: { skill: 0.9, aggression: 0.25, mistakeRate: 0.6, salvageBias: 0.2, shortcutBias: 1, riskBias: 0.35, capitalBias: 0.2, boostUse: 0.8, caution: 0.75, ram: 0, nerve: 0.7, erratic: 0, gunnery: 0.5, style: 'EVASIVE' },
   },
   {
     id: 'psycho', name: 'PSYCHO', tagline: 'Attacks other racers',
     ship: aiShip('psycho', 'Hellion', 'hellion', { primary: 0x1c1c1c, secondary: 0xff1a6a, glow: 0xff2a2a }, 'bulwark',
       { topSpeed: 115, accel: 53, turnRate: 1.62, armour: 122, shield: 62, weaponDamage: 9, fireRate: 8, missiles: 9, mass: 1.15 }),
-    personality: { skill: 0.84, aggression: 1, mistakeRate: 1.4, salvageBias: 0.1, shortcutBias: 0.35, riskBias: 0.5, capitalBias: 0.1, boostUse: 0.85 },
+    personality: { skill: 0.84, aggression: 1, mistakeRate: 1.4, salvageBias: 0.1, shortcutBias: 0.35, riskBias: 0.5, capitalBias: 0.1, boostUse: 0.85, caution: 0, ram: 0.8, nerve: 0.8, erratic: 0.55, gunnery: 0.6, style: 'BERSERKER' },
   },
   {
     id: 'veteran', name: 'VETERAN', tagline: 'Consistent',
     ship: aiShip('veteran', 'Old Guard', 'oldguard', { primary: 0x2a55b8, secondary: 0xd8d8d8, glow: 0x50b0ff }, 'burst',
       { topSpeed: 116, accel: 53, turnRate: 1.72, armour: 116, shield: 70 }),
-    personality: { skill: 0.94, aggression: 0.4, mistakeRate: 0.12, salvageBias: 0.25, shortcutBias: 0.4, riskBias: 0.15, capitalBias: 0.4, boostUse: 0.8 },
+    personality: { skill: 0.94, aggression: 0.4, mistakeRate: 0.12, salvageBias: 0.25, shortcutBias: 0.4, riskBias: 0.15, capitalBias: 0.4, boostUse: 0.8, caution: 0.6, ram: 0.1, nerve: 0.5, erratic: 0, gunnery: 0.85, style: 'TACTICIAN' },
   },
   {
     id: 'showoff', name: 'SHOWOFF', tagline: 'Takes risky routes',
     ship: aiShip('showoff', 'Peacock', 'peacock', { primary: 0xff3db8, secondary: 0x30e0ff, glow: 0xffe85a }, 'dash',
       { topSpeed: 119, accel: 57, turnRate: 1.92, grip: 6.8, armour: 82, shield: 50, mass: 0.85 }),
-    personality: { skill: 0.88, aggression: 0.45, mistakeRate: 1.8, salvageBias: 0.3, shortcutBias: 0.5, riskBias: 1, capitalBias: 0.3, boostUse: 1 },
+    personality: { skill: 0.88, aggression: 0.45, mistakeRate: 1.8, salvageBias: 0.3, shortcutBias: 0.5, riskBias: 1, capitalBias: 0.3, boostUse: 1, caution: 0.1, ram: 0.3, nerve: 1, erratic: 0.35, gunnery: 0.45, style: 'DAREDEVIL' },
   },
   {
     id: 'mercenary', name: 'MERCENARY', tagline: 'Prioritises capital ship targets',
     ship: aiShip('mercenary', 'Contract', 'contract', { primary: 0x6a6f7a, secondary: 0xf0a020, glow: 0xffd040 }, 'bulwark',
       { topSpeed: 114, accel: 49, turnRate: 1.58, armour: 132, shield: 76, weaponDamage: 9, fireRate: 7, missiles: 10, mass: 1.25 }),
-    personality: { skill: 0.88, aggression: 0.35, mistakeRate: 0.6, salvageBias: 0.2, shortcutBias: 0.3, riskBias: 0.3, capitalBias: 1, boostUse: 0.7 },
+    personality: { skill: 0.88, aggression: 0.35, mistakeRate: 0.6, salvageBias: 0.2, shortcutBias: 0.3, riskBias: 0.3, capitalBias: 1, boostUse: 0.7, caution: 0.45, ram: 0.2, nerve: 0.45, erratic: 0, gunnery: 1, style: 'GUNSHIP' },
   },
 ];
 

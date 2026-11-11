@@ -6,7 +6,8 @@ import type { RaceDef } from '../data/campaign';
 import { Rng } from '../core/rng';
 import { idxAtS, newFrame, pointAt, progInRange, type Track } from '../tracks/track';
 import type { RaceSim } from './race';
-import { CAP_BOLT } from './weapons';
+import type { Ship } from './ship';
+import { CAP_BOLT, MISSILE } from './weapons';
 
 export type ComponentType = 'shield' | 'battery' | 'engine' | 'cargo';
 
@@ -29,9 +30,17 @@ export interface Strike { active: boolean; x: number; y: number; z: number; t: n
 
 export const COMPONENT_KILL_BONUS: Record<ComponentType, number> = { shield: 150, battery: 100, engine: 200, cargo: 150 };
 export const COMPONENT_LABEL: Record<ComponentType, string> = { shield: 'SHIELD GENERATOR', battery: 'WEAPON BATTERY', engine: 'ENGINE', cargo: 'CARGO BAY' };
+/** What each system does for the ship, and so what killing it achieves. */
+export const COMPONENT_EFFECT: Record<ComponentType, string> = {
+  shield: 'ALL SYSTEMS EXPOSED',
+  battery: 'INCOMING FIRE REDUCED',
+  engine: 'POWER FAILING - WEAPONS SLOWED',
+  cargo: 'REPAIRS OFFLINE - SALVAGE SPILLED',
+};
 export const CAPITAL_NAMES: Record<string, string> = { neon: 'ISV TOLLGATE', orbit: 'HMS GRAVEDIGGER', solar: 'DSS HELIOS WRATH', warzone: 'FLAGSHIP ABSOLUTION' };
+const SURFACE_ENEMY: Record<string, string> = { neon: 'RAIDER KESTREL', orbit: 'CORSAIR MAW', solar: 'DSS SUNDERER', warzone: 'DREADNOUGHT NEMESIS' };
 
-const BASE_HP: Record<ComponentType, number> = { shield: 1100, battery: 600, engine: 950, cargo: 1150 };
+const BASE_HP: Record<ComponentType, number> = { shield: 640, battery: 350, engine: 540, cargo: 660 };
 const RADIUS: Record<ComponentType, number> = { shield: 17, battery: 12, engine: 17, cargo: 19 };
 export const HULL_HALF_WIDTH = 48;
 export const HULL_HALF_HEIGHT = 30;
@@ -56,15 +65,18 @@ export class Capital {
   destroyedT = 0;
   shieldFlash = 0;
   private strikeT = 4;
+  private missileT = 6;
+  private readonly battle: boolean;
   private readonly rng: Rng;
   private readonly aggro: number;
   private readonly boltDamage: number;
   readonly zoneFrom: number; readonly zoneTo: number;
 
   constructor(track: Track, race: RaceDef, shipCount: number) {
-    this.name = CAPITAL_NAMES[track.def.id] ?? 'CAPITAL SHIP';
+    this.name = (track.def.id === 'hulk' ? SURFACE_ENEMY[race.theme] : CAPITAL_NAMES[race.theme]) ?? 'CAPITAL SHIP';
     this.rng = new Rng(race.seed * 31 + 7);
     this.aggro = race.capitalAggro;
+    this.battle = race.mode === 'battle';
     this.boltDamage = 7 + race.stage * 1.2;
     this.damageBy = new Array(shipCount).fill(0);
     const main = track.main, cap = track.def.capital;
@@ -142,7 +154,7 @@ export class Capital {
     c.flash = 1;
     c.lastHitBy = shipIdx;
     this.totalDamage += dealt;
-    if (shipIdx >= 0) { this.damageBy[shipIdx] += dealt; race.ships[shipIdx].capitalDamage += dealt; }
+    if (shipIdx >= 0) { this.damageBy[shipIdx] += dealt; race.ships[shipIdx].capitalDamage += dealt; race.ships[shipIdx].score += dealt * 0.25; }
     race.events.push('componentHit', shipIdx, hx, hy, hz, dealt, c.index);
     if (c.hp <= 0) this.destroyComponent(c, shipIdx, race);
     return dealt;
@@ -151,13 +163,13 @@ export class Capital {
   private destroyComponent(c: Component, shipIdx: number, race: RaceSim): void {
     c.alive = false; c.hp = 0;
     const killer = shipIdx >= 0 ? race.ships[shipIdx] : null;
-    if (killer) { killer.capitalKills++; killer.capitalKillBonus += COMPONENT_KILL_BONUS[c.type]; }
+    if (killer) { killer.capitalKills++; killer.capitalKillBonus += COMPONENT_KILL_BONUS[c.type]; killer.score += 400; }
     race.events.push('componentDestroyed', shipIdx, c.x, c.y, c.z, c.r, c.index, 0xffa040, COMPONENT_LABEL[c.type]);
     const track = race.track;
     if (c.type === 'shield') {
       this.shieldUp = false;
     } else if (c.type === 'engine') {
-      // overdrive reward: the killer is supercharged, and overdrive cells rain onto the track
+      // overdrive reward: the killer is supercharged, and overdrive cells rain onto the route
       if (killer) { killer.overdriveT = 10; killer.boost = 100; killer.boostLock = false; race.events.push('overdrive', killer.index, killer.x, killer.y, killer.z); }
       for (let k = 0; k < 3; k++) {
         const s = c.trackS + 50 + k * 34;
@@ -175,17 +187,64 @@ export class Capital {
         race.spawnPickup('cargo', 3, 0, s, d, tmp.x, tmp.y + 1.6, tmp.z, c.x, c.y, c.z, 50);
       }
     }
+    // shot-off wreckage tumbles onto the route below
+    race.dropDebris(c.trackS, c.x, c.y, c.z);
     if (!this.destroyed && this.components.every((k) => !k.alive)) {
       this.destroyed = true;
+      for (const st of this.strikes) st.active = false;
       race.events.push('capitalDestroyed', shipIdx, this.cx, this.cy, this.cz, this.length);
     }
   }
 
+  /** Reactor output: each dead engine slows every weapon on the ship. */
+  get power(): number {
+    let dead = 0, n = 0;
+    for (const c of this.components) if (c.type === 'engine') { n++; if (!c.alive) dead++; }
+    return n ? 1 - 0.3 * dead : 1;
+  }
+
+  /** Damage-control crews work out of the cargo bay; while it survives, damaged systems are patched up. */
+  get repairing(): boolean {
+    for (const c of this.components) if (c.type === 'cargo') return c.alive;
+    return false;
+  }
+
+  /** Telegraphed blast on the route ahead of a ship (also used for stray fleet fire). */
+  strikeAt(s: Ship, race: RaceSim, delay = 1.6, radius = 12): boolean {
+    const st = this.strikes.find((k) => !k.active);
+    if (!st) return false;
+    const track = race.track;
+    if (track.arena > 0) {
+      const lead = delay * this.rng.range(0.8, 1.15);
+      st.x = s.x + s.vx * lead + this.rng.range(-8, 8); st.z = s.z + s.vz * lead + this.rng.range(-8, 8); st.y = 0;
+      st.path = 0; st.s = 0; st.d = 0;
+    } else {
+      const path = track.paths[s.pathId];
+      const ahead = s.speed * delay * this.rng.range(0.85, 1.15) + 6;
+      const sAt = (s.idx + s.f) * path.step + ahead;
+      if (!path.closed && sAt > path.length - 20) return false;
+      pointAt(path, sAt, 0, tmp, fr);
+      const d = Math.max(-(fr.hw - 4), Math.min(fr.hw - 4, s.d + this.rng.range(-9, 9)));
+      pointAt(path, sAt, d, tmp, fr);
+      st.x = tmp.x; st.y = tmp.y; st.z = tmp.z;
+      st.path = s.pathId; st.s = path.closed ? ((sAt % path.length) + path.length) % path.length : sAt; st.d = d;
+    }
+    st.active = true; st.t = 0; st.delay = delay; st.r = radius;
+    race.events.push('strikeWarn', -1, st.x, st.y, st.z, st.r);
+    return true;
+  }
+
   update(dt: number, race: RaceSim): void {
     this.shieldFlash = Math.max(0, this.shieldFlash - dt * 3);
-    for (const c of this.components) c.flash = Math.max(0, c.flash - dt * 4);
+    const repair = this.repairing && !this.destroyed;
+    for (const c of this.components) {
+      c.flash = Math.max(0, c.flash - dt * 4);
+      if (repair && c.alive && c.hp < c.maxHp && c.flash <= 0) c.hp = Math.min(c.maxHp, c.hp + c.maxHp * 0.007 * dt);
+    }
     if (this.destroyed) this.destroyedT += dt;
     const racing = race.phase === 'racing';
+    const power = this.power;
+    const reach = this.battle ? 560 : 430;
 
     // ---- gun batteries: aimed three-round bursts at racers in range
     let batteries = 0;
@@ -202,43 +261,35 @@ export class Capital {
         }
         continue;
       }
-      c.fireT -= dt;
+      c.fireT -= dt * power;
       if (c.fireT <= 0) {
-        c.fireT = (2.6 / this.aggro) * this.rng.range(0.75, 1.35);
+        c.fireT = (2.2 / this.aggro) * this.rng.range(0.75, 1.35);
         let pick = -1, n = 0;
         for (const s of race.ships) {
           if (!s.alive || s.finished) continue;
           const d2 = (s.x - c.x) ** 2 + (s.z - c.z) ** 2;
-          if (d2 < 430 * 430) { n++; if (this.rng.next() < 1 / n) pick = s.index; }
+          if (d2 < reach * reach) { n++; if (this.rng.next() < 1 / n) pick = s.index; }
         }
         if (pick >= 0) { c.targetShip = pick; c.burstLeft = 3; c.burstT = 0; }
       }
     }
 
-    // ---- bombardment: telegraphed blasts on the racing line, scaled by surviving batteries
     if (racing && batteries > 0) {
-      this.strikeT -= dt;
+      // ---- bombardment: telegraphed blasts on the racing line, scaled by surviving batteries
+      this.strikeT -= dt * power;
       if (this.strikeT <= 0) {
-        this.strikeT = (3.4 / this.aggro) * Math.pow(4 / batteries, 0.7) * this.rng.range(0.7, 1.3);
-        let pick = -1, n = 0;
-        for (const s of race.ships) {
-          if (!s.alive || s.finished || s.pathId !== 0) continue;
-          if (progInRange(s.prog, this.zoneFrom, this.zoneTo, race.track.length)) { n++; if (this.rng.next() < 1 / n) pick = s.index; }
-        }
-        if (pick >= 0) {
-          const s = race.ships[pick];
-          const st = this.strikes.find((k) => !k.active);
-          if (st) {
-            const delay = 1.6;
-            const ahead = s.speed * delay * this.rng.range(0.85, 1.15) + 6;
-            const sAt = s.prog + ahead;
-            pointAt(race.track.main, sAt, 0, tmp, fr);
-            const d = Math.max(-(fr.hw - 4), Math.min(fr.hw - 4, s.d + this.rng.range(-9, 9)));
-            pointAt(race.track.main, sAt, d, tmp, fr);
-            st.active = true; st.x = tmp.x; st.y = tmp.y; st.z = tmp.z; st.t = 0; st.delay = delay; st.r = 12;
-            st.path = 0; st.s = ((sAt % race.track.length) + race.track.length) % race.track.length; st.d = d;
-            race.events.push('strikeWarn', -1, st.x, st.y, st.z, st.r);
-          }
+        this.strikeT = (3.0 / this.aggro) * Math.pow(4 / batteries, 0.7) * this.rng.range(0.7, 1.3);
+        const pick = this.pickInZone(race);
+        if (pick) this.strikeAt(pick, race);
+      }
+      // ---- guided missiles: slower than a bolt, but they follow. Flares or raw speed shake them.
+      this.missileT -= dt * power;
+      if (this.missileT <= 0) {
+        this.missileT = (7.5 / this.aggro) * Math.pow(4 / batteries, 0.6) * this.rng.range(0.7, 1.3);
+        const pick = this.pickInZone(race);
+        if (pick) {
+          const alive = this.components.filter((c) => c.type === 'battery' && c.alive);
+          this.fireMissile(alive[Math.floor(this.rng.next() * alive.length)], pick, race);
         }
       }
     }
@@ -255,6 +306,32 @@ export class Capital {
         }
       }
     }
+  }
+
+  private pickInZone(race: RaceSim): Ship | null {
+    let pick: Ship | null = null, n = 0;
+    for (const s of race.ships) {
+      if (!s.alive || s.finished) continue;
+      const inZone = this.battle
+        ? Math.hypot(s.x - this.cx, s.z - this.cz) < this.length * 0.5 + 420
+        : s.pathId === 0 && progInRange(s.prog, this.zoneFrom, this.zoneTo, race.track.length);
+      if (inZone) { n++; if (this.rng.next() < 1 / n) pick = s; }
+    }
+    return pick;
+  }
+
+  private fireMissile(c: Component, t: Ship, race: RaceSim): void {
+    const mx = c.x - this.nx * c.r, my = c.y - 2, mz = c.z - this.nz * c.r;
+    let dx = t.x - mx, dy = t.y - my, dz = t.z - mz;
+    const l = Math.hypot(dx, dy, dz) || 1;
+    dx /= l; dy /= l; dz /= l;
+    const p = race.projectiles.spawn();
+    p.kind = MISSILE; p.owner = -1;
+    p.x = p.px = mx; p.y = p.py = my; p.z = p.pz = mz;
+    p.speed = 120; p.maxSpeed = 188; p.turn = 2.2;
+    p.vx = dx * p.speed; p.vy = dy * p.speed; p.vz = dz * p.speed;
+    p.life = 7; p.damage = 26; p.tKind = 1; p.tIdx = t.index; p.color = 0xff5030;
+    race.events.push('enemyMissile', t.index, mx, my, mz, 0, c.index);
   }
 
   private fireBolt(c: Component, tx: number, ty: number, tz: number, tvx: number, tvz: number, race: RaceSim): void {

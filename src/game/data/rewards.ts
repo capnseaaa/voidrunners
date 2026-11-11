@@ -15,6 +15,8 @@ export interface RaceOutcome {
   capitalKills: number; // components the player finished off
   capitalDestroyed: boolean;
   capitalKillBonus: number; // credits from component kill rewards
+  droneKills: number; // enemy fighters shot down
+  score: number; // battle events: points scored
 }
 
 export interface ObjectiveResult { def: ObjectiveDef; done: boolean; value: number }
@@ -44,6 +46,7 @@ export function evaluateObjective(def: ObjectiveDef, o: RaceOutcome): ObjectiveR
     case 'capitalDestroyed': return { def, done: o.capitalDestroyed, value: o.capitalDestroyed ? 1 : 0 };
     case 'noDeaths': return { def, done: o.finished && o.deaths === 0, value: o.deaths };
     case 'racerKills': return { def, done: o.racerKills >= def.target, value: o.racerKills };
+    case 'droneKills': return { def, done: o.droneKills >= def.target, value: o.droneKills };
   }
 }
 
@@ -56,7 +59,7 @@ export function evaluateObjective(def: ObjectiveDef, o: RaceOutcome): ObjectiveR
 export function computeRewards(race: RaceDef, o: RaceOutcome): RewardBreakdown {
   const pos = Math.max(1, Math.min(10, Math.round(o.position)));
   const positionCredits = POSITION_CREDITS[pos - 1];
-  const combatCredits = Math.round(o.racerKills * 120 + o.racerDamage * 0.5);
+  const combatCredits = Math.round(o.racerKills * 200 + o.racerDamage * 0.4 + o.droneKills * 60);
   const capitalCredits = Math.round(o.capitalDamage * 0.3 + o.capitalKillBonus);
   const objectives = race.objectives.map((d) => evaluateObjective(d, o));
   const objectiveCredits = objectives.reduce((a, r) => a + (r.done ? r.def.bonus : 0), 0);

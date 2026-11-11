@@ -5,7 +5,8 @@ export type SimEventType =
   | 'countdown' | 'go' | 'shoot' | 'missile' | 'capitalFire' | 'hit' | 'shieldHit' | 'wallHit' | 'explosion'
   | 'shipDestroyed' | 'respawn' | 'pickup' | 'boostPad' | 'boostStart' | 'ability' | 'lap' | 'finish' | 'checkpoint'
   | 'componentHit' | 'capShieldHit' | 'componentDestroyed' | 'capitalDestroyed' | 'strikeWarn' | 'strike'
-  | 'overdrive' | 'message' | 'obstacleDestroyed' | 'overheat';
+  | 'overdrive' | 'message' | 'obstacleDestroyed' | 'overheat'
+  | 'flare' | 'droneDestroyed' | 'droneFire' | 'enemyMissile' | 'phase' | 'bounty' | 'timeUp';
 
 export interface SimEvent {
   type: SimEventType;

@@ -65,7 +65,7 @@ export class RaceRenderer {
   shakeEnabled = true;
 
   constructor(canvas: HTMLCanvasElement, private readonly sim: RaceSim, readonly quality: Quality) {
-    this.theme = THEMES[sim.track.def.id];
+    this.theme = THEMES[sim.race.theme];
     const theme = this.theme;
     this.renderer = new WebGLRenderer({ canvas, antialias: quality !== 'low', powerPreference: 'high-performance' });
     this.renderer.outputColorSpace = SRGBColorSpace;

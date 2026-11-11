@@ -16,7 +16,7 @@ class MemStorage implements StorageLike {
 
 const outcome = (o: Partial<RaceOutcome> = {}): RaceOutcome => ({
   position: 1, finished: true, time: 250, bestLap: 80, salvage: 20, deaths: 0, racerKills: 0, racerDamage: 0,
-  capitalDamage: 0, capitalTotalDamage: 0, capitalKills: 0, capitalDestroyed: false, capitalKillBonus: 0, ...o,
+  capitalDamage: 0, capitalTotalDamage: 0, capitalKills: 0, capitalDestroyed: false, capitalKillBonus: 0, droneKills: 0, score: 0, ...o,
 });
 
 describe('campaign structure', () => {

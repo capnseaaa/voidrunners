@@ -103,6 +103,10 @@ export class Ship {
     if (this.missileCd > 0) this.missileCd -= dt;
     if (this.fireCd > 0) this.fireCd -= dt;
     if (this.threatT > 0) this.threatT -= dt;
+    if (this.missileLockT > 0) { this.missileLockT -= dt; if (this.missileLockT <= 0) this.missileDist = 1e9; }
+    if (this.lockedT > 0) this.lockedT -= dt;
+    if (this.flareT > 0) this.flareT -= dt;
+    if (this.flareCd > 0) this.flareCd -= dt;
     this.sinceFire += dt;
     if (this.sinceFire > 0.3) {
       this.heat = Math.max(0, this.heat - 30 * dt);
@@ -123,6 +127,13 @@ export class Ship {
       ev.push('ability', this.index, this.x, this.y, this.z);
     }
     this.abilityHeld = c.ability;
+
+    // countermeasures: tapping boost while a missile is tracking dumps flares
+    if (canAct && c.boost && !this.boostHeld && this.missileLockT > 0 && this.flareCd <= 0) {
+      this.flareT = 0.9; this.flareCd = 5;
+      ev.push('flare', this.index, this.x, this.y, this.z);
+    }
+    this.boostHeld = c.boost;
 
     // steering
     this.steer += (steerIn - this.steer) * Math.min(1, dt * 9);
@@ -169,13 +180,37 @@ export class Ship {
     this.x += this.vx * dt;
     this.z += this.vz * dt;
 
-    this.resolveTrack(track, ev);
+    if (track.arena > 0) this.resolveArena(track.arena, ev); else this.resolveTrack(track, ev);
 
     // re-derive after wall response
     this.fwdSpeed = this.vx * hx + this.vz * hz;
     this.latSpeed = this.vx * rx + this.vz * rz;
     const targetRoll = clamp(this.steer * 0.55 + this.latSpeed * 0.012, -0.9, 0.9);
     this.roll += (targetRoll - this.roll) * Math.min(1, dt * 7);
+  }
+
+  /** Open-space events: free flight inside a circular battle zone. */
+  private resolveArena(radius: number, ev: EventQueue): void {
+    const r = Math.hypot(this.x, this.z);
+    const lim = radius - SHIP_RADIUS;
+    if (r > lim) {
+      const nx = this.x / r, nz = this.z / r;
+      this.x = nx * lim; this.z = nz * lim;
+      const vn = this.vx * nx + this.vz * nz;
+      if (vn > 0) {
+        this.vx -= nx * vn * 1.3; this.vz -= nz * vn * 1.3;
+        if (vn > 12) ev.push('wallHit', this.index, this.x, this.y, this.z, vn * 0.5);
+        // the boundary field turns the nose back toward the fight
+        const want = Math.atan2(-nx, -nz);
+        let dy = want - this.yaw;
+        if (dy > Math.PI) dy -= TWO_PI; else if (dy < -Math.PI) dy += TWO_PI;
+        this.yaw += dy * 0.06;
+      }
+    }
+    this.pathId = 0; this.d = 0; this.hw = 1e6;
+    this.y += (HOVER - this.y) * 0.3;
+    this.pitch = 0;
+    this.trackHx = Math.sin(this.yaw); this.trackHz = Math.cos(this.yaw); this.curv = 0;
   }
 
   private resolveTrack(track: Track, ev: EventQueue): void {
@@ -261,6 +296,13 @@ export class Ship {
   }
 
   threatT = 0; // >0 while a missile is closing in
+  missileLockT = 0; missileDist = 1e9; // a missile is tracking this ship (any range) and how close it is
+  lockedT = 0; lockedBy = -1; // a hostile racer has this ship in its sights
+  flareT = 0; flareCd = 0; // countermeasures: active window and cooldown
+  boostHeld = false;
+  targetRear = false; // current target sits behind the ship (rear gun / rear missile launch)
+  aimError = 0; // radians of gunnery error against small moving targets (AI pilots are not perfect shots)
+  score = 0; droneKills = 0; // battle events
   preferRacers = false; // targeting preference (AI personalities); the player always prefers the capital ship
   place = 0; // current race position, 1-based
   wallDamage = 0; // pending self-inflicted damage, applied by the race (needs the damage pipeline)
