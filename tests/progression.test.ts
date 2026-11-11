@@ -20,15 +20,27 @@ const outcome = (o: Partial<RaceOutcome> = {}): RaceOutcome => ({
 });
 
 describe('campaign structure', () => {
-  it('has 4 stages of 3 races: standard, capital challenge, championship', () => {
+  it('has 4 stages mixing circuit races, capital challenges, battles, surface races and a championship', () => {
     expect(STAGES.map((s) => s.name)).toEqual(['NEON FRONTIER', 'DEAD ORBIT', 'SOLAR SCAR', 'WARZONE ZERO']);
-    expect(RACES).toHaveLength(12);
+    expect(RACES).toHaveLength(17);
+    expect(new Set(RACES.map((r) => r.id)).size).toBe(17);
+    RACES.forEach((r, i) => expect(r.index).toBe(i));
     for (let st = 0; st < 4; st++) {
       const rs = RACES.filter((r) => r.stage === st);
-      expect(rs.map((r) => r.type)).toEqual(['standard', 'capital', 'championship']);
-      expect(rs.every((r) => r.laps === 3 && r.track === STAGES[st].track)).toBe(true);
+      const types = rs.map((r) => r.type);
+      expect(types[0]).toBe('standard');
+      expect(types[1]).toBe('capital');
+      expect(types[types.length - 1]).toBe('championship');
+      expect(types.some((t) => t === 'battle' || t === 'surface')).toBe(true);
+      expect(rs.every((r) => r.theme === STAGES[st].track)).toBe(true);
     }
-    expect(new Set(RACES.map((r) => r.id)).size).toBe(12);
+    const battles = RACES.filter((r) => r.type === 'battle'), surface = RACES.filter((r) => r.type === 'surface');
+    expect(battles.length).toBeGreaterThanOrEqual(3);
+    expect(surface.length).toBeGreaterThanOrEqual(2);
+    expect(battles.every((r) => r.mode === 'battle' && r.track === 'arena' && r.timeLimit >= 120 && r.timeLimit <= 150 && r.drones >= 8)).toBe(true);
+    expect(surface.every((r) => r.mode === 'race' && r.track === 'hulk' && r.dying)).toBe(true);
+    // the original twelve events keep their ids, so existing records still line up
+    for (const id of ['s1r1', 's1r2', 's1r3', 's2r1', 's2r2', 's2r3', 's3r1', 's3r2', 's3r3', 's4r1', 's4r2', 's4r3']) expect(RACES.some((r) => r.id === id)).toBe(true);
   });
 
   it('pays the specified credits per finishing position', () => {
@@ -49,7 +61,7 @@ describe('campaign structure', () => {
 
   it('adds combat, capital ship, salvage and objective bonuses', () => {
     const base = computeRewards(RACES[1], outcome({ position: 5, salvage: 0 }));
-    const rich = computeRewards(RACES[1], outcome({ position: 5, salvage: 30, racerKills: 2, racerDamage: 300, capitalDamage: 1500, capitalTotalDamage: 6000, capitalKills: 2, capitalKillBonus: 300, capitalDestroyed: true }));
+    const rich = computeRewards(RACES[1], outcome({ position: 5, salvage: 30, racerKills: 2, racerDamage: 300, droneKills: 3, capitalDamage: 1500, capitalTotalDamage: 6000, capitalKills: 2, capitalKillBonus: 300, capitalDestroyed: true }));
     expect(rich.combatCredits).toBeGreaterThan(base.combatCredits);
     expect(rich.capitalCredits).toBeGreaterThan(700);
     expect(rich.salvage).toBe(30);
@@ -158,6 +170,19 @@ describe('save data', () => {
     expect(sanitizeSave(migrateSave(v1)).settings.masterVolume).toBeCloseTo(0.3);
   });
 
+  it('migrates a v2 save across the inserted events without losing progress', () => {
+    const done = { completed: true, attempts: 1, bestPosition: 2, bestTime: 250, bestLap: 80, bestShip: 'comet' };
+    const v2 = { version: 2, credits: 900, races: { s1r1: done, s1r2: done, s1r3: done, s2r1: { ...done, completed: false } } };
+    const m = sanitizeSave(migrateSave(v2));
+    expect(m.version).toBe(SAVE_VERSION);
+    expect(m.races.s1b.completed).toBe(true); // new event sitting before progress already made
+    expect(m.races.s1b.attempts).toBe(0);
+    for (const r of RACES) if (r.index <= RACES.findIndex((x) => x.id === 's2r1')) expect(isRaceUnlocked(m, r)).toBe(true);
+    expect(m.races.s2s).toBeUndefined(); // not reached yet: still to be played
+    expect(m.settings.touchControls).toBe('auto');
+    expect(m.settings.gyro).toBe(false);
+  });
+
   it('reset wipes progress but keeps settings', () => {
     const st = new MemStorage();
     const s = { ...defaultSave(), credits: 9999, unlockedShips: ['comet', 'bruiser'] };
@@ -194,6 +219,7 @@ describe('save data', () => {
     const rw = computeRewards(RACES[0], outcome({ position: 2 }));
     s = applyRaceResult(s, RACES[0], 'comet', outcome({ position: 2 }), rw);
     s = applyRaceResult(s, RACES[1], 'comet', outcome({ position: 3 }), computeRewards(RACES[1], outcome({ position: 3 })));
+    expect(RACES[1].id).toBe('s1r2');
     expect(shipLockState(s, 'vulture')).toBe('available');
     const bought = buyShip(s, 'vulture')!;
     expect(bought.unlockedShips).toContain('vulture');
@@ -213,10 +239,11 @@ describe('save data', () => {
     s = applyRaceResult(s, RACES[0], 'comet', good, computeRewards(RACES[0], good));
     expect(s.races.s1r1).toMatchObject({ completed: true, attempts: 2, bestPosition: 4, bestTime: 260, bestLap: 82, bestShip: 'comet' });
     expect(isRaceUnlocked(s, RACES[1])).toBe(true);
-    for (const r of [RACES[1], RACES[2]]) { const o = outcome({ position: 1 }); s = applyRaceResult(s, r, 'comet', o, computeRewards(r, o)); }
+    const rest = RACES.filter((r) => r.stage === 0).slice(1);
+    for (const r of rest) { const o = outcome({ position: 1 }); s = applyRaceResult(s, r, 'comet', o, computeRewards(r, o)); }
     expect(isStageUnlocked(s, 1)).toBe(true);
-    expect(s.totals.races).toBe(4);
-    expect(s.totals.wins).toBe(2);
+    expect(s.totals.races).toBe(2 + rest.length);
+    expect(s.totals.wins).toBe(rest.length);
     // a worse later result never overwrites a record
     const worse = outcome({ position: 8, time: 400, bestLap: 120 });
     s = applyRaceResult(s, RACES[0], 'comet', worse, computeRewards(RACES[0], worse));

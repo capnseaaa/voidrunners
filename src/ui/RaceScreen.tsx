@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState, useSyncExternalStore } from 'react';
 import { audio } from '../game/audio/AudioEngine';
-import { RACES, type RaceDef } from '../game/data/campaign';
+import { RACES, TYPE_LABEL, type RaceDef } from '../game/data/campaign';
 import { capitalShare } from '../game/data/rewards';
 import { getPlayerShip } from '../game/data/ships';
 import { Game, type RaceResult } from '../game/Game';
@@ -8,6 +8,8 @@ import { hudStore } from '../game/hudStore';
 import type { SaveData, Settings } from '../game/save/save';
 import { Btn, ControlsGuide, fmtTime, ordinal } from './common';
 import { Countdown, Hud } from './Hud';
+import { TouchControls } from './TouchControls';
+import { isTouchDevice } from '../game/input/Input';
 import { SettingsPanel } from './Menus';
 
 interface Props {
@@ -35,6 +37,9 @@ export function RaceScreen({ race, save, autopilot, onSettings, onResult, onRest
   const hasResult = useRef(false);
   // settings at race start (quality needs a restart; the rest applies live)
   const startSettings = useRef(save.settings);
+  const touch = save.settings.touchControls === 'on' || (save.settings.touchControls === 'auto' && isTouchDevice());
+  const touchRef = useRef(touch);
+  touchRef.current = touch;
 
   useEffect(() => {
     let disposed = false;
@@ -45,7 +50,7 @@ export function RaceScreen({ race, save, autopilot, onSettings, onResult, onRest
       try {
         const ship = getPlayerShip(save.selectedShip);
         g = new Game(canvasRef.current, {
-          race, ship, upgrades: save.upgrades[ship.id], settings: startSettings.current, autopilot,
+          race, ship, upgrades: save.upgrades[ship.id], settings: startSettings.current, touch: touchRef.current, autopilot,
           onFinish: (r) => { hasResult.current = true; const out = resultRef.current(r); setNextUnlocked(out.nextUnlocked); setResult(r); },
           onPauseToggle: () => { if (!hasResult.current) setPaused((p) => !p); },
         });
@@ -70,7 +75,7 @@ export function RaceScreen({ race, save, autopilot, onSettings, onResult, onRest
   }, []);
 
   useEffect(() => { gameRef.current?.setPaused(paused); if (!paused) setPauseTab('menu'); }, [paused]);
-  useEffect(() => { gameRef.current?.applySettings(save.settings); }, [save.settings]);
+  useEffect(() => { gameRef.current?.applySettings(save.settings, touch); }, [save.settings, touch]);
   // auto-pause when the tab is hidden
   useEffect(() => {
     const onVis = () => { if (document.hidden && !hasResult.current && gameRef.current) setPaused(true); };
@@ -100,8 +105,9 @@ export function RaceScreen({ race, save, autopilot, onSettings, onResult, onRest
           </div>
         </div>
       )}
-      {game && <Hud game={game} showMinimap={save.settings.showMinimap} />}
-      {game && !result && <Countdown />}
+      {game && <Hud game={game} showMinimap={save.settings.showMinimap} touch={touch} />}
+      {game && !result && <Countdown race={race} touch={touch} />}
+      {game && touch && !result && !paused && <TouchControls game={game} gyro={save.settings.gyro} autoThrottle={save.settings.autoThrottle} onPause={() => setPaused(true)} />}
       {paused && !result && (
         <div className="modal">
           <div className="panel scroll">
@@ -115,7 +121,7 @@ export function RaceScreen({ race, save, autopilot, onSettings, onResult, onRest
                 <Btn kind="danger" sound="back" onClick={() => onExit('campaign')}>Quit to Campaign</Btn>
               </div>
             )}
-            {pauseTab === 'controls' && (<><ControlsGuide /><div style={{ marginTop: 14 }}><Btn sound="back" onClick={() => setPauseTab('menu')}>◀ Back</Btn></div></>)}
+            {pauseTab === 'controls' && (<><ControlsGuide touch={touch} /><div style={{ marginTop: 14 }}><Btn sound="back" onClick={() => setPauseTab('menu')}>◀ Back</Btn></div></>)}
             {pauseTab === 'settings' && (<><SettingsPanel settings={save.settings} onChange={onSettings} /><Btn sound="back" onClick={() => setPauseTab('menu')}>◀ Back</Btn></>)}
           </div>
         </div>
@@ -135,12 +141,12 @@ function Results({ result, nextUnlocked, next, onRestart, onNext, onExit }: { re
       <div className="panel scroll">
         <div className="row" style={{ alignItems: 'flex-end', justifyContent: 'space-between', marginBottom: 10 }}>
           <div>
-            <div className="label">{race.name} · Race {race.index + 1}/12</div>
+            <div className="label">{race.name} · {TYPE_LABEL[race.type]} · Event {race.index + 1}/{RACES.length}</div>
             <div className="bigpos">{o.finished ? ordinal(o.position) : 'DNF'} <span style={{ fontSize: 22, color: 'var(--text)' }}>of 10</span></div>
           </div>
           <div className="kv" style={{ fontSize: 13 }}>
-            <span>Race time</span><span>{fmtTime(o.time)}</span>
-            <span>Best lap</span><span>{fmtTime(o.bestLap)}</span>
+            {race.mode === 'battle' ? (<><span>Score</span><span>{o.score.toLocaleString()}</span><span>Fighters shot down</span><span>{o.droneKills}</span></>)
+              : (<><span>Race time</span><span>{fmtTime(o.time)}</span><span>Best lap</span><span>{fmtTime(o.bestLap)}</span></>)}
             <span>Times wrecked</span><span>{o.deaths}</span>
           </div>
         </div>
@@ -148,7 +154,7 @@ function Results({ result, nextUnlocked, next, onRestart, onNext, onExit }: { re
           <div>
             <div className="label">Rewards</div>
             <div className="line"><span>Finishing position ({ordinal(o.position)})</span><span>{rw.positionCredits} ¢</span></div>
-            <div className="line"><span>Combat ({o.racerKills} wrecked, {Math.round(o.racerDamage)} dmg)</span><span>{rw.combatCredits} ¢</span></div>
+            <div className="line"><span>Combat ({o.racerKills} rivals wrecked{o.droneKills ? `, ${o.droneKills} fighters` : ''}, {Math.round(o.racerDamage)} dmg)</span><span>{rw.combatCredits} ¢</span></div>
             <div className="line"><span>Capital ship ({Math.round(o.capitalDamage)} dmg · {share.toFixed(0)}% · {o.capitalKills} kills)</span><span>{rw.capitalCredits} ¢</span></div>
             <div className="line"><span>Salvage recovered ({rw.salvage})</span><span>{rw.salvageCredits} ¢</span></div>
             {rw.objectives.map((ob) => (
@@ -171,7 +177,7 @@ function Results({ result, nextUnlocked, next, onRestart, onNext, onExit }: { re
             {(hud?.standings ?? []).map((s) => (
               <div className="line" key={s.name}>
                 <span style={{ color: s.isPlayer ? 'var(--yellow)' : s.color }}>{s.place}. {s.name}</span>
-                <span style={{ color: s.finished ? 'var(--green)' : 'var(--dim)' }}>{s.finished ? (s.dnf ? 'DNF' : fmtTime(s.time)) : `on lap ${s.lap}`}</span>
+                <span style={{ color: s.finished ? 'var(--green)' : 'var(--dim)' }}>{race.mode === 'battle' ? `${s.score.toLocaleString()} pts` : s.finished ? (s.dnf ? 'DNF' : fmtTime(s.time)) : `on lap ${s.lap}`}</span>
               </div>
             ))}
           </div>

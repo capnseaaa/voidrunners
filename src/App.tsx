@@ -58,6 +58,7 @@ export function App() {
   if (raceCtx) {
     return (
       <div className="app crt">
+        <div className="rotate"><i>▯</i>ROTATE YOUR DEVICE<br />VOIDRUNNERS PLAYS IN LANDSCAPE</div>
         <RaceScreen
           key={raceCtx.nonce}
           race={raceCtx.race}
@@ -75,6 +76,7 @@ export function App() {
 
   return (
     <div className="app crt">
+      <div className="rotate"><i>▯</i>ROTATE YOUR DEVICE<br />VOIDRUNNERS PLAYS IN LANDSCAPE</div>
       <Backdrop />
       {screen === 'title' && <Title save={save} go={setScreen} />}
       {screen === 'campaign' && <Campaign save={save} initialRace={lastRace} onBack={() => setScreen('title')} onLaunch={launch} go={setScreen} />}

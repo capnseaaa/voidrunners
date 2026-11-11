@@ -121,7 +121,7 @@ export const HULK: TrackDef = {
     { path: 0, at: 9.2, d: 0.5 }, { path: 0, at: 10.55, d: 0 }, { path: 0, at: 13.3, d: 0 }, { path: 0, at: 14.5, d: -0.3 },
     { path: 1, at: 0.5, d: 0 }, { path: 2, at: 0.35, d: 0 }, { path: 2, at: 0.65, d: 0 },
   ],
-  capital: { from: 0.5, to: 2.6, side: 1, dist: 150, height: 45 },
+  capital: { from: 0.95, to: 2.75, side: 1, dist: 150, height: 45 },
 };
 
 // Open-space battle zone. The ring is only a reference line (drops and the capital

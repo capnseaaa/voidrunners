@@ -59,20 +59,29 @@ export function TopBar({ title, save, onBack }: { title: string; save: SaveData;
   );
 }
 
-export function ControlsGuide() {
-  const rows: [string[], string][] = [
+export function ControlsGuide({ compact, touch }: { compact?: boolean; touch?: boolean }) {
+  if (touch) {
+    const rows: [string, string][] = [
+      ['Left pad / tilt', 'Steer'], ['Auto', 'Accelerate (hold BRAKE to slow)'], ['FIRE', 'Blasters (hold)'],
+      ['BOOST', 'Boost (hold). Tap it with a missile inbound: flares'], ['MSL', 'Missile'], ['ABILITY', 'Ship ability'],
+    ];
+    return <div className={`keys ${compact ? 'compact' : ''}`}>{rows.map(([k, label]) => <div key={k} style={{ display: 'contents' }}><span><kbd>{k}</kbd></span><span>{label}</span></div>)}</div>;
+  }
+  const rows: [string[], string][] = compact ? [
+    [['W'], 'Accelerate'], [['S'], 'Brake'], [['A', 'D'], 'Steer'], [['Space'], 'Fire'], [['Shift'], 'Boost / flares'], [['E'], 'Missile'], [['Q'], 'Ability'],
+  ] : [
     [['W', '↑'], 'Accelerate'],
     [['S', '↓'], 'Brake / reverse'],
-    [['A', 'D', '←', '→'], 'Steer'],
-    [['Space'], 'Fire blasters (unlimited, watch the heat)'],
-    [['Shift'], 'Launch missile (limited)'],
-    [['E'], 'Boost (hold)'],
-    [['Q'], 'Ship ability'],
+    [['A', 'D', '←', '→'], 'Steer left / right'],
+    [['Space'], 'Fire primary weapon (unlimited, watch the heat)'],
+    [['Shift'], 'Boost (hold). Tap it while a missile is inbound to drop flares'],
+    [['E'], 'Fire missile (limited)'],
+    [['Q'], 'Special ship ability'],
     [['R'], 'Reset to track'],
     [['Esc'], 'Pause'],
   ];
   return (
-    <div className="keys">
+    <div className={`keys ${compact ? 'compact' : ''}`}>
       {rows.map(([keys, label]) => (
         <div key={label} style={{ display: 'contents' }}>
           <span>{keys.map((k) => <kbd key={k} style={{ marginRight: 4 }}>{k}</kbd>)}</span>

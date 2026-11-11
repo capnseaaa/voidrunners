@@ -668,7 +668,13 @@ export class RaceSim {
             o.missileLockT = 0.35; if (dist < o.missileDist) o.missileDist = dist;
             if (dist < 90) o.threatT = 0.4;
             // countermeasures: flares pull the seeker off inside its terminal run
-            if (o.flareT > 0 && dist < 170) { has = false; p.tKind = 0; p.life = Math.min(p.life, 0.7); o.missileDist = 1e9; }
+            if (o.flareT > 0 && dist < 170) {
+              // the seeker swings after the decoys: it veers off the ship's line and burns out
+              has = false; p.tKind = 0; p.life = Math.min(p.life, 0.6); o.missileDist = 1e9; o.missileLockT = 0;
+              const a = (this.rng.next() < 0.5 ? -1 : 1) * 0.75, ca = Math.cos(a), sa = Math.sin(a);
+              const vx = p.vx * ca - p.vz * sa, vz = p.vx * sa + p.vz * ca;
+              p.vx = vx; p.vz = vz; p.vy = p.speed * 0.35;
+            }
           }
         } else if (p.tKind === T_COMP) { const k = cap.components[p.tIdx]; if (k.alive) { tx = k.x; ty = k.y; tz = k.z; has = true; } }
         else if (p.tKind === T_DRONE) { const d = drones[p.tIdx]; if (d.active) { tx = d.x; ty = d.y; tz = d.z; has = true; } }

@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { audio } from '../game/audio/AudioEngine';
-import { RACES, SHIP_UNLOCKS, STAGES, type RaceDef } from '../game/data/campaign';
+import { RACES, SHIP_UNLOCKS, STAGES, TYPE_LABEL, type RaceDef } from '../game/data/campaign';
+import { gyroSupported, isTouchDevice, listenTilt, requestGyroPermission, tilt } from '../game/input/Input';
 import {
   ABILITIES, computeStats, MAX_UPGRADE_LEVEL, PLAYER_SHIPS, statRatings, UPGRADE_CATEGORIES, upgradeCost, UPGRADES, getPlayerShip,
   type UpgradeCategory,
@@ -12,7 +13,7 @@ import { ShipPreview } from './ShipPreview';
 export type Screen = 'title' | 'campaign' | 'hangar' | 'upgrades' | 'records' | 'settings';
 
 const hex = (c: number) => '#' + c.toString(16).padStart(6, '0');
-const TYPE_LABEL: Record<string, string> = { standard: 'Standard Race', capital: 'Capital Ship Challenge', championship: 'Championship' };
+const TYPE_COLOR: Record<string, string> = { standard: 'var(--cyan)', capital: 'var(--red)', championship: 'var(--yellow)', battle: 'var(--mag)', surface: 'var(--orange)' };
 
 // ------------------------------------------------------------------ title
 export function Title({ save, go }: { save: SaveData; go: (s: Screen) => void }) {
@@ -43,10 +44,18 @@ export function Title({ save, go }: { save: SaveData; go: (s: Screen) => void })
         <Btn onClick={() => go('records')}>Race Records</Btn>
         <Btn onClick={() => go('settings')}>Settings</Btn>
       </div>
-      <div className="foot">CAMPAIGN {done}/12 · FLYING {getPlayerShip(save.selectedShip).name} · W/A/S/D TO FLY · SPACE TO FIRE</div>
+      <div className="foot">CAMPAIGN {done}/{RACES.length} · FLYING {getPlayerShip(save.selectedShip).name} · WASD FLY · SPACE FIRE · SHIFT BOOST · E MISSILE · Q ABILITY</div>
     </div>
   );
 }
+
+const EVENT_BLURB: Record<string, string> = {
+  standard: 'Three fast laps of the circuit with a capital ship parked on the route. Shoot rivals for position, bounties and boost.',
+  capital: 'A circuit race under the guns of a tougher capital ship. Its shield generator, batteries, engines and cargo bay each do something; take them apart.',
+  championship: 'The stage final. The strongest grid, more hazards, and a top-four finish needed to move on.',
+  battle: 'No track. A free-flight fight in an open battle zone: enemy fighters hunt you, a capital ship anchors the middle, and the highest score wins.',
+  surface: 'A race across the hull of an enormous battleship: flight deck, gun decks, tunnels and the hangar. The ship is under fire, and sections of deck are lost as the laps go by.',
+};
 
 // --------------------------------------------------------------- campaign
 export function Campaign({ save, onBack, onLaunch, go, initialRace }: { save: SaveData; onBack: () => void; onLaunch: (r: RaceDef) => void; go: (s: Screen) => void; initialRace?: string }) {
@@ -77,7 +86,7 @@ export function Campaign({ save, onBack, onLaunch, go, initialRace }: { save: Sa
                     <button key={r.id} className={`race-btn ${sel === r.id ? 'sel' : ''}`} disabled={!unlocked}
                       onMouseEnter={() => audio.ui('move')} onClick={() => { audio.ui('select'); setSel(r.id); }} onDoubleClick={() => unlocked && onLaunch(r)}>
                       <span className="num">{r.index + 1}</span>
-                      <span className="nm">{r.name}<br /><span className="st">{TYPE_LABEL[r.type]}</span></span>
+                      <span className="nm">{r.name}<br /><span className="st" style={{ color: TYPE_COLOR[r.type] }}>{TYPE_LABEL[r.type]}</span></span>
                       <span className={`st ${rr?.completed ? 'done' : ''}`}>{!unlocked ? '🔒' : rr?.completed ? `✔ ${ordinal(rr.bestPosition)}` : rr?.bestPosition ? `best ${ordinal(rr.bestPosition)}` : 'NEW'}</span>
                     </button>
                   );
@@ -87,15 +96,17 @@ export function Campaign({ save, onBack, onLaunch, go, initialRace }: { save: Sa
           })}
         </div>
         <div className="panel detail scroll">
-          <div className="label">Race {race.index + 1} of 12 · {STAGES[race.stage].name}</div>
+          <div className="label">Event {race.index + 1} of {RACES.length} · {STAGES[race.stage].name}</div>
           <h3>{race.name}</h3>
-          <div><span className="tag" style={{ color: race.type === 'capital' ? 'var(--red)' : race.type === 'championship' ? 'var(--yellow)' : 'var(--cyan)' }}>{TYPE_LABEL[race.type]}</span></div>
+          <div><span className="tag" style={{ color: TYPE_COLOR[race.type] }}>{TYPE_LABEL[race.type]}</span></div>
+          <p style={{ margin: 0, color: 'var(--dim)', fontSize: 12.5, lineHeight: 1.45 }}>{EVENT_BLURB[race.type]}</p>
           <div className="kv">
-            <span>Format</span><span>{race.laps} laps · 10 racers</span>
+            <span>Format</span><span>{race.mode === 'battle' ? `${Math.round(race.timeLimit)} s · score attack · 10 pilots` : `${race.laps} laps · 10 racers`}</span>
             <span>To advance</span><span>Finish {ordinal(race.unlockPos)} or better</span>
             <span>Best finish</span><span>{rec?.bestPosition ? ordinal(rec.bestPosition) : '—'}</span>
-            <span>Best time</span><span>{fmtTime(rec?.bestTime ?? 0)}</span>
-            <span>Best lap</span><span>{fmtTime(rec?.bestLap ?? 0)}</span>
+            {race.mode === 'battle'
+              ? <><span>Best score</span><span>{rec?.bestScore ? rec.bestScore.toLocaleString() : '—'}</span></>
+              : <><span>Best time</span><span>{fmtTime(rec?.bestTime ?? 0)}</span><span>Best lap</span><span>{fmtTime(rec?.bestLap ?? 0)}</span></>}
           </div>
           <div>
             <div className="label" style={{ marginBottom: 4 }}>Bonus objectives</div>
@@ -106,7 +117,7 @@ export function Campaign({ save, onBack, onLaunch, go, initialRace }: { save: Sa
           </div>
           <div className="spacer" />
           <div className="row">
-            <Btn kind="primary" disabled={!isRaceUnlocked(save, race)} onClick={() => onLaunch(race)}>▶ Launch Race</Btn>
+            <Btn kind="primary" disabled={!isRaceUnlocked(save, race)} onClick={() => onLaunch(race)}>▶ Launch</Btn>
             <Btn onClick={() => go('hangar')}>Change Ship</Btn>
           </div>
         </div>
@@ -201,7 +212,7 @@ export function Hangar({ save, setSave, onBack, tab: initialTab }: { save: SaveD
                 </>
               )}
               {lock === 'locked' && (
-                <div className="lockmsg">🔒 Complete “{reqRace?.name}” ({STAGES[reqRace?.stage ?? 0].name}, race {(reqRace?.slot ?? 0) + 1}) to unlock, then buy for {unlock.cost.toLocaleString()} ¢.</div>
+                <div className="lockmsg">🔒 Complete “{reqRace?.name}” ({STAGES[reqRace?.stage ?? 0].name}) to unlock, then buy for {unlock.cost.toLocaleString()} ¢.</div>
               )}
             </>
           ) : (
@@ -258,7 +269,7 @@ export function Records({ save, onBack }: { save: SaveData; onBack: () => void }
       </div>
       <div className="panel scroll" style={{ flex: 1, minHeight: 0, padding: 0 }}>
         <table className="rec">
-          <thead><tr><th>#</th><th>Race</th><th>Type</th><th>Status</th><th>Best finish</th><th>Best time</th><th>Best lap</th><th>Ship</th><th>Attempts</th></tr></thead>
+          <thead><tr><th>#</th><th>Race</th><th>Type</th><th>Status</th><th>Best finish</th><th>Best time / score</th><th>Best lap</th><th>Ship</th><th>Attempts</th></tr></thead>
           <tbody>
             {STAGES.map((st) => [
               <tr className="stage-row" key={`s${st.id}`}><td colSpan={9} style={{ color: st.color }}>Stage {st.id + 1} — {st.name}</td></tr>,
@@ -269,7 +280,7 @@ export function Records({ save, onBack }: { save: SaveData; onBack: () => void }
                   <tr key={r.id} style={{ opacity: open ? 1 : 0.45 }}>
                     <td>{r.index + 1}</td><td>{r.name}</td><td>{TYPE_LABEL[r.type]}</td>
                     <td style={{ color: rec?.completed ? 'var(--green)' : 'var(--dim)' }}>{!open ? 'Locked' : rec?.completed ? 'Cleared' : rec?.attempts ? 'Attempted' : 'Open'}</td>
-                    <td>{rec?.bestPosition ? ordinal(rec.bestPosition) : '—'}</td><td>{fmtTime(rec?.bestTime ?? 0)}</td><td>{fmtTime(rec?.bestLap ?? 0)}</td>
+                    <td>{rec?.bestPosition ? ordinal(rec.bestPosition) : '—'}</td><td>{r.mode === 'battle' ? (rec?.bestScore ? `${rec.bestScore.toLocaleString()} pts` : '—') : fmtTime(rec?.bestTime ?? 0)}</td><td>{r.mode === 'battle' ? '—' : fmtTime(rec?.bestLap ?? 0)}</td>
                     <td>{rec?.bestShip ? getPlayerShip(rec.bestShip).name : '—'}</td><td>{rec?.attempts ?? 0}</td>
                   </tr>
                 );
@@ -310,7 +321,67 @@ export function SettingsPanel({ settings, onChange }: { settings: Settings; onCh
       {vol('Master volume', 'masterVolume')}
       {vol('Music', 'musicVolume')}
       {vol('Effects', 'sfxVolume')}
+      <div className="label" style={{ marginTop: 14 }}>Touch and tilt (phones and tablets)</div>
+      <div className="setrow"><span>Touch controls</span><div className="seg">{(['auto', 'on', 'off'] as const).map((m) => <button key={m} className={settings.touchControls === m ? 'on' : ''} onClick={() => { audio.ui('select'); set('touchControls', m); }}>{m}</button>)}</div><span /></div>
+      <div className="setrow"><span>Auto-accelerate</span><div className="seg"><button className={settings.autoThrottle ? 'on' : ''} onClick={() => set('autoThrottle', true)}>On</button><button className={!settings.autoThrottle ? 'on' : ''} onClick={() => set('autoThrottle', false)}>Off</button></div><span /></div>
+      <TiltSettings settings={settings} onChange={onChange} />
     </div>
+  );
+}
+
+/** Tilt (gyro) steering: enable with a permission prompt where the browser needs one, sensitivity, calibration, invert. */
+function TiltSettings({ settings, onChange }: { settings: Settings; onChange: (s: Settings) => void }) {
+  const [status, setStatus] = useState('');
+  const [reading, setReading] = useState(0);
+  useEffect(() => {
+    if (!settings.gyro) return;
+    listenTilt();
+    const id = setInterval(() => setReading(tilt.seen ? tilt.raw : NaN), 200);
+    return () => clearInterval(id);
+  }, [settings.gyro]);
+  const supported = gyroSupported();
+  const enable = async () => {
+    audio.ui('select');
+    const res = await requestGyroPermission();
+    if (res === 'granted') { listenTilt(); onChange({ ...settings, gyro: true }); setStatus('Tilt steering on. Hold the device how you like to play, then press Calibrate.'); }
+    else if (res === 'denied') { onChange({ ...settings, gyro: false }); setStatus('Motion access was refused. Allow "Motion & Orientation Access" for this site in the browser settings, then try again. Touch steering still works.'); }
+    else setStatus('This browser has no motion sensors. Touch steering is used instead.');
+  };
+  const live = settings.gyro && Number.isFinite(reading);
+  const steer = live ? Math.max(-1, Math.min(1, ((reading - settings.gyroZero) / (24 / settings.gyroSensitivity)) * (settings.gyroInvert ? -1 : 1))) : 0;
+  return (
+    <>
+      <div className="setrow">
+        <span>Tilt steering</span>
+        <div className="seg">
+          <button className={settings.gyro ? 'on' : ''} disabled={!supported} onClick={enable}>On</button>
+          <button className={!settings.gyro ? 'on' : ''} onClick={() => { onChange({ ...settings, gyro: false }); setStatus(''); }}>Off</button>
+        </div>
+        <span />
+      </div>
+      {settings.gyro && (
+        <>
+          <div className="setrow">
+            <span>Tilt sensitivity</span>
+            <input type="range" min={0.4} max={2.5} step={0.1} value={settings.gyroSensitivity} aria-label="Tilt sensitivity" onChange={(e) => onChange({ ...settings, gyroSensitivity: Number(e.target.value) })} />
+            <span>{settings.gyroSensitivity.toFixed(1)}×</span>
+          </div>
+          <div className="setrow">
+            <span>Calibrate</span>
+            <div className="seg">
+              <button disabled={!live} onClick={() => { audio.ui('select'); onChange({ ...settings, gyroZero: Math.max(-60, Math.min(60, tilt.raw)) }); setStatus('Calibrated: this angle is now straight ahead.'); }}>Set centre</button>
+              <button className={settings.gyroInvert ? 'on' : ''} onClick={() => onChange({ ...settings, gyroInvert: !settings.gyroInvert })}>Invert</button>
+            </div>
+            <span />
+          </div>
+          <div className="tiltbar" aria-hidden><i style={{ left: `${50 + steer * 46}%` }} /></div>
+          <div className="label" style={{ fontSize: 10 }}>{live ? 'Tilt the device: the marker shows your steering.' : 'Waiting for the motion sensor. On iPhone and iPad, press On to grant access. Sensors need a secure (https) page.'}</div>
+        </>
+      )}
+      {!supported && <div className="label" style={{ fontSize: 10 }}>No motion sensor reported by this browser: touch steering is used.</div>}
+      {status && <div className="lockmsg" style={{ fontSize: 12 }}>{status}</div>}
+      {isTouchDevice() ? null : <div className="label" style={{ fontSize: 10, marginTop: 4 }}>These apply when the game runs on a touch device.</div>}
+    </>
   );
 }
 
@@ -327,11 +398,18 @@ export function SettingsScreen({ save, setSave, onBack, onReset }: { save: SaveD
           <Btn kind="danger" onClick={() => setConfirm(true)}>Reset Save Data…</Btn>
         </div>
         <div className="panel scroll">
-          <div className="label" style={{ marginBottom: 10 }}>Controls</div>
+          <div className="label" style={{ marginBottom: 10 }}>Controls (keyboard)</div>
           <ControlsGuide />
+          <p style={{ color: 'var(--dim)', fontSize: 12, lineHeight: 1.5 }}>
+            All keys can be held together: steer, boost and fire at once. If your keyboard drops a key when several are held (a hardware limit on some models),
+            use the alternates: <kbd>J</kbd> or left mouse to fire, <kbd>K</kbd> boost, <kbd>L</kbd> or right mouse for missiles, <kbd>I</kbd> ability, arrow keys to steer.
+          </p>
+          <div className="label" style={{ margin: '14px 0 10px' }}>Controls (touch)</div>
+          <ControlsGuide touch />
           <p style={{ color: 'var(--dim)', fontSize: 12.5, lineHeight: 1.5, marginTop: 16 }}>
-            Blasters auto-aim at the bracketed target: a rival dead ahead, or the nearest exposed capital ship system when the battleship is in range.
-            Destroy its shield generator first — everything else is protected until it falls. Fly through chevron pads for a boost kick and collect salvage for advanced upgrades.
+            Weapons auto-aim at the bracketed target: a rival or fighter dead ahead first, then the nearest exposed capital ship system.
+            With nothing ahead they swing to whoever is on your tail: the rear gun fires and missiles launch backwards. The radar by the speed readout shows who is behind you.
+            A missile warning means tap boost to drop flares. Wreck a rival for a bounty, boost and a missile. On the capital ship, kill the shield generator first; engines cut its power and the cargo bay stops its repairs.
           </p>
         </div>
       </div>

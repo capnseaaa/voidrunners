@@ -5,15 +5,15 @@ import { getTrack } from '../src/game/tracks';
 import { insidePath, locateOn, newFrame, pointAt, type TrackPos } from '../src/game/tracks/track';
 import { Vector3 } from 'three';
 
-const IDS: TrackId[] = ['neon', 'orbit', 'solar', 'warzone'];
+const IDS: TrackId[] = ['neon', 'orbit', 'solar', 'warzone', 'hulk'];
 
 describe.each(IDS)('track %s', (id) => {
   const track = getTrack(id);
   const main = track.main;
 
   it('is a closed loop of sensible length with evenly spaced samples', () => {
-    expect(track.length).toBeGreaterThan(9000);
-    expect(track.length).toBeLessThan(14000);
+    expect(track.length).toBeGreaterThan(5000);
+    expect(track.length).toBeLessThan(7500);
     const ss = main.samples;
     for (let i = 0; i < ss.length; i++) {
       const a = ss[i], b = ss[(i + 1) % ss.length];
@@ -77,21 +77,52 @@ describe.each(IDS)('track %s', (id) => {
     for (const race of RACES.filter((r) => r.track === id)) {
       const layout = buildLayout(track, race);
       expect(layout.pads.length).toBeGreaterThanOrEqual(8);
-      expect(layout.pickups.length).toBeGreaterThan(60);
-      expect(layout.obstacles.length).toBeGreaterThan(20);
+      expect(layout.pickups.length).toBeGreaterThan(35);
+      expect(layout.obstacles.length).toBeGreaterThan(12);
       for (const item of [...layout.pads, ...layout.pickups, ...layout.obstacles]) {
         pointAt(track.paths[item.path], item.s, 0, v, fr);
         expect(Math.abs(item.d)).toBeLessThan(fr.hw);
       }
       // nothing blocks the starting grid
-      for (const o of layout.obstacles) if (o.path === 0) expect(o.baseS > 200 && o.baseS < track.length - 280).toBe(true);
+      for (const o of layout.obstacles) if (o.path === 0) expect(o.baseS > 170 && o.baseS < track.length - 250).toBe(true);
       // both alternative routes hold something worth the detour
       for (let b = 1; b < track.paths.length; b++) expect(layout.pickups.some((p) => p.path === b)).toBe(true);
     }
   });
 
   it('has a capital ship encounter stretch away from the start line', () => {
-    expect(track.capitalToS).toBeGreaterThan(track.capitalFromS + 800);
-    expect(track.capitalFromS).toBeGreaterThan(600);
+    expect(track.capitalToS).toBeGreaterThan(track.capitalFromS + 450);
+    expect(track.capitalFromS).toBeGreaterThan(300);
+  });
+});
+
+describe('battle arena', () => {
+  it('is an open zone with free-floating hazards and salvage inside the boundary', async () => {
+    const { buildArenaLayout } = await import('../src/game/sim/layout');
+    const track = getTrack('arena');
+    expect(track.arena).toBeGreaterThan(800);
+    for (const race of RACES.filter((r) => r.mode === 'battle')) {
+      const layout = buildArenaLayout(track, race);
+      expect(layout.pads).toHaveLength(0);
+      expect(layout.obstacles.length).toBeGreaterThan(15);
+      expect(layout.pickups.length).toBeGreaterThan(40);
+      for (const it of [...layout.obstacles, ...layout.pickups]) expect(Math.hypot(it.x, it.z)).toBeLessThan(track.arena);
+    }
+  });
+});
+
+describe('battleship surface circuit', () => {
+  it('has a gap to leap and deck sections that are lost in later laps, with hazards held back for each phase', () => {
+    const track = getTrack('hulk');
+    const kinds = new Set(track.def.sections.map((s) => s.kind));
+    for (const k of ['gap', 'breakA', 'breakB', 'tunnel', 'hangar', 'deck']) expect(kinds.has(k)).toBe(true);
+    const race = RACES.find((r) => r.type === 'surface')!;
+    const layout = buildLayout(track, race);
+    for (const ph of [1, 2]) {
+      const held = layout.obstacles.filter((o) => o.phase === ph);
+      expect(held.length).toBeGreaterThan(5);
+      expect(held.every((o) => o.dormant && !o.alive)).toBe(true);
+    }
+    expect(layout.obstacles.filter((o) => o.phase === 0 && !o.slot).every((o) => o.alive)).toBe(true);
   });
 });

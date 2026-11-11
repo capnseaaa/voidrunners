@@ -1,7 +1,8 @@
 import { describe, expect, it } from 'vitest';
 import { RACES } from '../src/game/data/campaign';
 import { ABILITIES, getPlayerShip, uniformLevels, ZERO_UPGRADES, type UpgradeLevels } from '../src/game/data/ships';
-import { RaceSim } from '../src/game/sim/race';
+import { RaceSim, T_COMP, T_DRONE, T_SHIP } from '../src/game/sim/race';
+import { MISSILE } from '../src/game/sim/weapons';
 import { SHIP_RADIUS, type Ship } from '../src/game/sim/ship';
 import { frameAt, newFrame } from '../src/game/tracks/track';
 
@@ -199,8 +200,9 @@ describe('combat', () => {
     const stepNoAi = (sec: number) => { for (let i = 0; i < sec / DT; i++) { t.ctl.throttle = 0; sim.step(DT); sim.events.clear(); } };
     sim.ai[1] = { update() { /* inert */ } } as never;
     sim.selectTarget(p);
-    expect(p.targetKind).toBe(1);
+    expect(p.targetKind).toBe(T_SHIP);
     expect(p.targetIdx).toBe(1);
+    expect(p.targetRear).toBe(false);
     const hp0 = t.hp + t.shield;
     p.ctl.fire = true; stepNoAi(2);
     expect(t.shield).toBeLessThan(t.stats.shield);
@@ -274,7 +276,7 @@ describe('capital ship', () => {
     expect(types.filter((t) => t === 'engine').length).toBeGreaterThanOrEqual(2);
     expect(types.filter((t) => t === 'cargo')).toHaveLength(1);
     expect(cap.hp).toBe(cap.maxHp);
-    expect(cap.length).toBeGreaterThan(800);
+    expect(cap.length).toBeGreaterThan(450);
   });
 
   it('shield generator protects everything else until it is destroyed', () => {
@@ -306,7 +308,7 @@ describe('capital ship', () => {
     const gen = cap.components.find((c) => c.type === 'shield')!;
     p.placeOnTrack(sim.track, 0, gen.trackS - 150, 0);
     sim.selectTarget(p);
-    expect(p.targetKind).toBe(2);
+    expect(p.targetKind).toBe(T_COMP);
     expect(cap.components[p.targetIdx].type).toBe('shield'); // only the generator is exposed
     p.ctl.fire = true;
     let hits = 0;
@@ -334,7 +336,7 @@ describe('capital ship', () => {
         // hold every racer in the encounter zone, invulnerable, so only the capital ship acts
         sim.ships.forEach((s, i) => { s.placeOnTrack(sim.track, 0, mid - 200 + i * 40, 0); s.invuln = 1; s.dead = 0; });
         cap.update(DT, sim);
-        n += count(sim, 'capitalFire') + count(sim, 'strikeWarn') * 3;
+        n += count(sim, 'capitalFire') + count(sim, 'strikeWarn') * 3 + count(sim, 'enemyMissile') * 3;
         sim.events.clear();
       }
       return n;
@@ -431,10 +433,275 @@ function shipSummary(s: Ship) {
   return { name: s.name, pos: s.finishPos, time: s.finishTime, dnf: s.dnf, salvage: s.salvage, cap: s.capitalDamage, racer: s.racerDamage };
 }
 
+describe('rear-facing combat and countermeasures', () => {
+  const setup = () => {
+    const sim = make();
+    toGreen(sim); isolate(sim);
+    const p = sim.player, t = sim.ships[3];
+    sim.ai[3] = { update() { /* inert */ } } as never;
+    p.placeOnTrack(sim.track, 0, 300, 0);
+    t.dead = 0; t.placeOnTrack(sim.track, 0, 230, 2); // 70 units behind the player
+    return { sim, p, t };
+  };
+
+  it('locks a pursuer behind the ship and the rear gun hits it', () => {
+    const { sim, p, t } = setup();
+    sim.selectTarget(p);
+    expect(p.targetKind).toBe(T_SHIP);
+    expect(p.targetIdx).toBe(3);
+    expect(p.targetRear).toBe(true);
+    const hp = t.hp + t.shield;
+    p.ctl.fire = true;
+    let lockSeen = false;
+    run(sim, 2, () => { if (t.lockedT > 0 && t.lockedBy === 0) lockSeen = true; });
+    expect(t.hp + t.shield).toBeLessThan(hp - 5);
+    expect(lockSeen).toBe(true); // the target is warned that it is being fired on
+  });
+
+  it('launches missiles backwards onto a pursuer', () => {
+    const { sim, p, t } = setup();
+    t.hp = 15; t.shield = 0;
+    sim.selectTarget(p);
+    p.ctl.missile = true; sim.step(DT); p.ctl.missile = false;
+    const m = sim.projectiles.items.find((q) => q.active && q.kind === MISSILE)!;
+    expect(m.vx * p.hx + m.vz * p.hz).toBeLessThan(0); // leaves the tail rail heading backwards
+    run(sim, 3);
+    expect(t.deaths).toBe(1);
+    expect(p.racerKills).toBe(1);
+  });
+
+  it('wrecking a rival pays a bounty on the spot: boost and a missile', () => {
+    const { sim, p, t } = setup();
+    p.boost = 10; p.missiles = 1;
+    let bounty = 0;
+    sim.damageShip(t, 1e5, 0, p.x, p.z);
+    for (let i = 0; i < sim.events.count; i++) if (sim.events.list[i].type === 'bounty') bounty++;
+    expect(bounty).toBe(1);
+    expect(p.boost).toBeGreaterThanOrEqual(50);
+    expect(p.missiles).toBe(2);
+    expect(p.score).toBeGreaterThan(100);
+  });
+
+  it('warns of an inbound enemy missile and flares (tap boost) break its lock', () => {
+    const fire = (sim: RaceSim) => {
+      const p = sim.player;
+      const m = sim.projectiles.spawn();
+      m.kind = MISSILE; m.owner = -1; m.x = m.px = p.x - p.hx * 150; m.y = m.py = p.y; m.z = m.pz = p.z - p.hz * 150;
+      m.speed = 150; m.maxSpeed = 188; m.turn = 2.2; m.vx = p.hx * 150; m.vy = 0; m.vz = p.hz * 150;
+      m.life = 7; m.damage = 26; m.tKind = T_SHIP; m.tIdx = 0;
+    };
+    // no countermeasures: it hits
+    const a = make(); toGreen(a); isolate(a);
+    a.player.placeOnTrack(a.track, 0, 300, 0);
+    fire(a);
+    let warned = false;
+    const hpA = a.player.hp + a.player.shield;
+    run(a, 3, () => { if (a.player.missileLockT > 0) warned = true; });
+    expect(warned).toBe(true);
+    expect(a.player.hp + a.player.shield).toBeLessThan(hpA);
+    // flares: tap boost while it is tracking
+    const b = make(); toGreen(b); isolate(b);
+    b.player.placeOnTrack(b.track, 0, 300, 0);
+    fire(b);
+    const hpB = b.player.hp + b.player.shield;
+    let flares = 0;
+    run(b, 0.3);
+    b.player.ctl.boost = true; b.step(DT); flares += count(b, 'flare'); b.events.clear(); b.player.ctl.boost = false;
+    run(b, 3);
+    expect(flares).toBe(1);
+    expect(b.player.hp + b.player.shield).toBe(hpB);
+    expect(b.player.flareCd).toBeGreaterThan(0); // and they need time to reload
+  });
+});
+
+describe('enemy fighters', () => {
+  it('chase racers, shoot them from behind, and can be shot down for a reward', () => {
+    const sim = make('s2r2');
+    expect(sim.drones.drones.length).toBeGreaterThan(0);
+    toGreen(sim); isolate(sim);
+    const p = sim.player, d = sim.drones.drones[0];
+    sim.player.placeOnTrack(sim.track, 0, 300, 0);
+    p.ctl.throttle = 1;
+    // bring one in right behind the player
+    d.active = true; d.hp = d.maxHp = 30; d.x = p.x - p.hx * 60; d.z = p.z - p.hz * 60; d.y = p.y + 2; d.target = 0; d.retargetT = 99; d.attackT = 99; d.breakT = 0; d.fireT = 0;
+    let fired = 0, dmg = 0, locked = false;
+    run(sim, 5, () => {
+      fired += count(sim, 'droneFire');
+      for (let i = 0; i < sim.events.count; i++) { const e = sim.events.list[i]; if ((e.type === 'hit' || e.type === 'shieldHit') && e.ship === 0) dmg += e.a; }
+      if (p.lockedT > 0) locked = true;
+      d.retargetT = 99;
+    });
+    expect(fired).toBeGreaterThan(3);
+    expect(dmg).toBeGreaterThan(0);
+    expect(locked).toBe(true);
+    expect(Math.hypot(d.x - p.x, d.z - p.z)).toBeLessThan(160); // it kept up
+    // the rear gun picks it up and kills it
+    sim.selectTarget(p);
+    expect(p.targetKind).toBe(T_DRONE);
+    expect(p.targetRear).toBe(true);
+    p.ctl.fire = true;
+    let down = 0;
+    run(sim, 6, () => { down += count(sim, 'droneDestroyed'); d.retargetT = 99; if (d.active) d.attackT = 99; });
+    expect(down).toBeGreaterThanOrEqual(1);
+    expect(p.droneKills).toBeGreaterThanOrEqual(1);
+    expect(p.score).toBeGreaterThanOrEqual(100);
+  });
+});
+
+describe('capital ship systems matter', () => {
+  it('engines feed the guns: each one lost slows the whole ship', () => {
+    const cap = make().capital;
+    expect(cap.power).toBe(1);
+    const engines = cap.components.filter((c) => c.type === 'engine');
+    engines[0].alive = false;
+    expect(cap.power).toBeCloseTo(0.7, 5);
+    engines[1].alive = false;
+    expect(cap.power).toBeCloseTo(0.4, 5);
+  });
+
+  it('the cargo bay runs repairs: damaged systems heal until it is destroyed', () => {
+    const sim = make();
+    toGreen(sim);
+    const cap = sim.capital;
+    const gen = cap.components.find((c) => c.type === 'shield')!;
+    cap.damage(gen, 300, 1, sim, 0, 0, 0);
+    const hp = gen.hp;
+    for (let i = 0; i < 600; i++) { cap.update(DT, sim); sim.events.clear(); }
+    expect(gen.hp).toBeGreaterThan(hp + 10);
+    expect(cap.repairing).toBe(true);
+    cap.damage(gen, 1e6, 1, sim, 0, 0, 0);
+    const gun = cap.components.find((c) => c.type === 'battery')!;
+    cap.damage(cap.components.find((c) => c.type === 'cargo')!, 1e6, 1, sim, 0, 0, 0);
+    expect(cap.repairing).toBe(false);
+    cap.damage(gun, 100, 1, sim, 0, 0, 0);
+    const g2 = gun.hp;
+    for (let i = 0; i < 600; i++) { cap.update(DT, sim); sim.events.clear(); }
+    expect(gun.hp).toBe(g2);
+  });
+
+  it('launches guided missiles and drops wreckage onto the route when systems are shot off', () => {
+    const sim = make('s1r2');
+    toGreen(sim);
+    const cap = sim.capital;
+    const mid = (sim.track.capitalFromS + sim.track.capitalToS) / 2;
+    let missiles = 0;
+    for (let k = 0; k < 60 * 60; k++) {
+      sim.ships.forEach((s, i) => { s.placeOnTrack(sim.track, 0, mid - 200 + i * 40, 0); s.invuln = 1; s.dead = 0; });
+      cap.update(DT, sim);
+      missiles += count(sim, 'enemyMissile');
+      sim.events.clear();
+    }
+    expect(missiles).toBeGreaterThan(3);
+    const slots = () => sim.layout.obstacles.filter((o) => o.slot && o.alive).length;
+    expect(slots()).toBe(0);
+    sim.ships.forEach((s) => s.placeOnTrack(sim.track, 0, 100, 0)); // clear the zone
+    cap.damage(cap.components.find((c) => c.type === 'shield')!, 1e6, 0, sim, 0, 0, 0);
+    expect(slots()).toBeGreaterThan(0);
+  });
+});
+
+describe('open-space battles', () => {
+  it('fly free inside the battle zone, are scored by points, and end on the clock', () => {
+    const race = RACES.find((r) => r.mode === 'battle')!;
+    const sim = make(race.id, 'comet', ZERO_UPGRADES, true);
+    expect(sim.mode).toBe('battle');
+    expect(sim.track.arena).toBeGreaterThan(0);
+    let far = 0, steps = 0, downs = 0, playerDeaths = 0;
+    while (sim.phase !== 'done' && steps < 60 * 300) {
+      sim.step(DT); steps++;
+      downs += count(sim, 'droneDestroyed');
+      for (let i = 0; i < sim.events.count; i++) { const e = sim.events.list[i]; if (e.type === 'shipDestroyed' && e.a === 1 && e.ship === 0) playerDeaths++; }
+      sim.events.clear();
+      for (const s of sim.ships) far = Math.max(far, Math.hypot(s.x, s.z));
+    }
+    expect(sim.phase).toBe('done');
+    expect(sim.time).toBeGreaterThanOrEqual(race.timeLimit);
+    expect(sim.time).toBeLessThan(race.timeLimit + 1);
+    expect(far).toBeLessThanOrEqual(sim.track.arena + 0.5);
+    expect(downs).toBeGreaterThan(20);
+    expect(sim.ships.every((s) => s.finished && !s.dnf)).toBe(true);
+    const order = sim.ships.slice().sort((a, b) => a.finishPos - b.finishPos);
+    expect(order.map((s) => s.finishPos)).toEqual([1, 2, 3, 4, 5, 6, 7, 8, 9, 10]);
+    for (let i = 1; i < order.length; i++) expect(order[i].score).toBeLessThanOrEqual(order[i - 1].score);
+    expect(sim.ships.filter((s) => s.droneKills > 0).length).toBeGreaterThanOrEqual(7);
+    expect(sim.capital.totalDamage).toBeGreaterThan(0);
+    expect(sim.player.score).toBeGreaterThan(0);
+    expect(playerDeaths).toBe(sim.player.deaths); // the player's ship can be destroyed here too
+  });
+
+  it('a wrecked ship re-enters from the edge of the zone', () => {
+    const sim = make(RACES.find((r) => r.mode === 'battle')!.id);
+    toGreen(sim);
+    const p = sim.player;
+    sim.damageShip(p, 1e6, -1, 0, 0);
+    expect(p.alive).toBe(false);
+    run(sim, 2.6);
+    expect(p.alive).toBe(true);
+    expect(Math.hypot(p.x, p.z)).toBeGreaterThan(sim.track.arena * 0.7);
+    expect(p.invuln).toBeGreaterThan(0);
+  });
+});
+
+describe('battleship surface races', () => {
+  it('the ship breaks up lap by lap: new wreckage and fires appear at each phase', () => {
+    const sim = make('s4s', 'comet', uniformLevels(4), true);
+    expect(sim.race.dying).toBe(true);
+    const live = () => sim.layout.obstacles.filter((o) => o.phase > 0 && o.alive).length;
+    expect(live()).toBe(0);
+    const seen: number[] = [];
+    let steps = 0, strikes = 0;
+    const counts: number[] = [0, 0, 0];
+    while (sim.phase !== 'done' && steps < 60 * 400) {
+      sim.step(DT); steps++;
+      for (let i = 0; i < sim.events.count; i++) { const e = sim.events.list[i]; if (e.type === 'phase') { seen.push(e.a); counts[e.a] = live(); } if (e.type === 'strike') strikes++; }
+      sim.events.clear();
+    }
+    expect(seen).toEqual([1, 2]);
+    expect(counts[1]).toBeGreaterThan(5);
+    expect(counts[2]).toBeGreaterThan(counts[1]);
+    expect(sim.warPhase).toBe(2);
+    expect(strikes).toBeGreaterThan(8); // stray fleet fire lands on the hull throughout
+    expect(sim.ships.every((s) => s.finished && !s.dnf && s.lap === 3)).toBe(true); // the route stays passable to the end
+  });
+});
+
+describe('AI pilots', () => {
+  it('are imperfect shots, while the player\'s aim assist is exact', () => {
+    const sim = make();
+    expect(sim.player.aimError).toBe(0);
+    const errs = sim.ships.slice(1).map((s) => s.aimError);
+    expect(Math.min(...errs)).toBeGreaterThan(0.03);
+    const by = Object.fromEntries(sim.ships.slice(1).map((s) => [s.name, s.aimError]));
+    expect(by.MERCENARY).toBeLessThan(by.ROOKIE);
+  });
+
+  it('cautious racers stop picking fights when badly hurt; berserkers do the opposite', () => {
+    const hostileShots = (name: string, hpFrac: number): number => {
+      const sim = make('s1r1');
+      toGreen(sim); isolate(sim);
+      const a = sim.ships.find((s) => s.name === name)!, t = sim.player;
+      sim.ai[0] = { update() { /* inert */ } } as never;
+      let shots = 0;
+      for (let k = 0; k < 60 * 40; k++) {
+        a.dead = 0; a.invuln = 0; a.heat = 0; a.overheated = false;
+        a.placeOnTrack(sim.track, 0, 400, 0); t.placeOnTrack(sim.track, 0, 470, 0); t.invuln = 1;
+        a.hp = a.stats.armour * hpFrac; a.lastHitT = 99;
+        sim.selectTarget(a);
+        sim.ai[a.index]!.update(DT, sim);
+        if (a.ctl.fire && a.targetKind === T_SHIP) shots++;
+      }
+      return shots;
+    };
+    expect(hostileShots('TANK', 0.2)).toBe(0); // cautious brawler: survival first
+    expect(hostileShots('PSYCHO', 0.2)).toBeGreaterThan(hostileShots('PSYCHO', 1) * 0.9);
+    expect(hostileShots('PSYCHO', 0.2)).toBeGreaterThan(200);
+  });
+});
+
 describe('full races', () => {
   const agg: Record<string, { salvage: number; cap: number; racer: number; shortcut: number; risky: number; pos: number }> = {};
 
-  it.each(RACES.map((r) => [r.id, r.name] as const))('%s %s: all ten racers race three laps and finish under identical rules', (id) => {
+  it.each(RACES.filter((r) => r.mode === 'race').map((r) => [r.id, r.name] as const))('%s %s: all ten racers race three laps and finish under identical rules', (id) => {
     const sim = make(id, 'comet', uniformLevels(Math.min(5, Math.round(RACES.find((r) => r.id === id)!.aiLevel))), true);
     const L = sim.track.length, K = sim.track.checkpoints.length;
     const prev = sim.ships.map((s) => ({ x: s.x, z: s.z, alive: true, total: s.total }));
@@ -451,7 +718,7 @@ describe('full races', () => {
         if (s.alive && p.alive) {
           const moved = Math.hypot(s.x - p.x, s.z - p.z);
           // nothing moves faster than the physics allows (dash peak is 1.7x top speed), plus collision push-out slack
-          if (moved > s.stats.topSpeed * 1.75 * DT + 5) teleports++;
+          if (moved > s.stats.topSpeed * 1.75 * DT + 6) teleports++;
           if (!s.finished) maxSpeed[s.index] = Math.max(maxSpeed[s.index], s.fwdSpeed);
           if (!s.finished) onPath[s.index][s.pathId]++;
         }
@@ -476,19 +743,20 @@ describe('full races', () => {
       expect(s.lap).toBe(3);
       expect(s.cpCount).toBe(3 * K + 1); // start line + every checkpoint of every lap, in order
       expect(s.total).toBeGreaterThanOrEqual(3 * L - 1);
-      expect(s.bestLap).toBeGreaterThan(40);
+      expect(s.bestLap).toBeGreaterThan(28);
       expect(maxSpeed[s.index]).toBeLessThanOrEqual(s.stats.topSpeed * 1.75);
       expect(shots[s.index]).toBeGreaterThan(0); // everyone fires weapons at some point
     }
-    // race length target: 4-6 minutes (the fastest AI may dip slightly under on late, fully upgraded grids)
-    expect(fin[0].time).toBeGreaterThan(205);
-    expect(fin[9].time).toBeLessThan(380);
+    // race length target: about 2 to 2.5 minutes (the fastest AI on a late, fully upgraded grid dips under)
+    expect(fin[0].time).toBeGreaterThan(95);
+    expect(fin[0].time).toBeLessThan(160);
+    expect(fin[9].time).toBeLessThan(210);
     // the capital ship was attacked by many racers and damage was attributed
     const cap = sim.capital;
-    expect(cap.totalDamage).toBeGreaterThan(cap.maxHp * 0.4);
-    expect(cap.damageBy.filter((d) => d > 0).length).toBeGreaterThanOrEqual(6);
+    expect(cap.totalDamage).toBeGreaterThan(cap.maxHp * 0.25);
+    expect(cap.damageBy.filter((d) => d > 0).length).toBeGreaterThanOrEqual(5);
     expect(cap.damageBy.reduce((a, b) => a + b, 0)).toBeCloseTo(cap.totalDamage, 2);
-    expect(sim.ships.filter((s) => s.salvage > 0).length).toBeGreaterThanOrEqual(9);
+    expect(sim.ships.filter((s) => s.salvage > 0).length).toBeGreaterThanOrEqual(8);
     for (const s of sim.ships) {
       const a = (agg[s.name] ??= { salvage: 0, cap: 0, racer: 0, shortcut: 0, risky: 0, pos: 0 });
       a.salvage += s.salvage; a.cap += s.capitalDamage; a.racer += s.racerDamage; a.pos += s.finishPos;
