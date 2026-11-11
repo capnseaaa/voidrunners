@@ -188,7 +188,7 @@ kbd { font-family: var(--mono); font-size: 12px; padding: 2px 8px; border: 1px s
 .hud .keyhint { color: var(--dim); font-size: 10px; }
 .hud .msgs { position: absolute; left: 50%; top: 21%; transform: translateX(-50%); display: flex; flex-direction: column; align-items: center; gap: 6px; }
 .hud .msg { font-family: var(--display); font-style: italic; font-size: clamp(15px, 2.3vh, 22px); letter-spacing: 0.12em; padding: 4px 16px; background: rgba(5,2,15,0.6); border-left: 4px solid var(--cyan); border-right: 4px solid var(--cyan); animation: msgin 0.25s ease-out; }
-.hud .msg.good { color: var(--green); border-color: var(--green); } .hud .msg.bad { color: var(--red); border-color: var(--red); } .hud .msg.boss { color: var(--orange); border-color: var(--orange); }
+.hud .msg.k-good { color: var(--green); border-color: var(--green); } .hud .msg.k-bad { color: var(--red); border-color: var(--red); } .hud .msg.k-boss { color: var(--orange); border-color: var(--orange); }
 @keyframes msgin { from { transform: scaleX(0.3); opacity: 0; } to { transform: none; opacity: 1; } }
 .hud .target { position: absolute; left: 50%; top: 118px; transform: translateX(-50%); font-size: 12px; text-align: center; color: var(--yellow); }
 .hud .target .mbar { width: 180px; height: 6px; margin-top: 3px; } .hud .target .mbar i { background: var(--yellow); }
@@ -197,10 +197,10 @@ kbd { font-family: var(--mono); font-size: 12px; padding: 2px 8px; border: 1px s
 .hud .flash { position: absolute; inset: 0; box-shadow: inset 0 0 120px 30px rgba(255, 40, 60, 0.75); }
 .hud .fps { position: absolute; right: 16px; bottom: 150px; color: var(--dim); font-size: 10px; }
 .count { position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; pointer-events: none; z-index: 12; }
-.count span { font-family: var(--display); font-weight: 900; font-style: italic; font-size: clamp(64px, 17vh, 170px); color: #fff; text-shadow: 0 0 40px var(--mag), 8px 8px 0 rgba(0,229,255,0.5); animation: cnt 0.9s ease-out; }
+.count > span { font-family: var(--display); font-weight: 900; font-style: italic; font-size: clamp(64px, 17vh, 170px); color: #fff; text-shadow: 0 0 40px var(--mag), 8px 8px 0 rgba(0,229,255,0.5); animation: cnt 0.9s ease-out; }
 .count .hint { position: absolute; bottom: 24%; left: 0; right: 0; text-align: center; font-size: 13px; color: var(--text); text-shadow: 0 0 6px #000; letter-spacing: 0.06em; }
 .count .hint kbd { margin: 0 4px 0 12px; background: rgba(5,2,15,0.7); }
-.count span.go { color: var(--green); text-shadow: 0 0 50px var(--green), 8px 8px 0 rgba(255,225,74,0.5); }
+.count > span.go { color: var(--green); text-shadow: 0 0 50px var(--green), 8px 8px 0 rgba(255,225,74,0.5); }
 @keyframes cnt { from { transform: scale(2.4); opacity: 0; } 30% { opacity: 1; } to { transform: scale(1); } }
 .results .panel { width: min(1040px, 96vw); }
 .results-grid { display: grid; grid-template-columns: 1.1fr 1fr; gap: 16px; }
@@ -237,15 +237,17 @@ kbd { font-family: var(--mono); font-size: 12px; padding: 2px 8px; border: 1px s
 .hud .mini { width: 180px; height: 150px; display: block; }
 .hud .stand em { font-style: normal; font-size: 8.5px; margin-left: 5px; padding: 0 3px; border: 1px solid currentColor; border-radius: 2px; opacity: 0.85; }
 .hud .hitmark { position: absolute; left: 50%; top: 44%; transform: translate(-50%, -50%); font-size: 34px; color: #fff; text-shadow: 0 0 10px var(--red), 0 0 3px #000; font-family: var(--display); }
-.hud .alert { position: absolute; left: 50%; top: 30%; transform: translateX(-50%); font-family: var(--display); font-style: italic; font-size: clamp(16px, 3vh, 26px); letter-spacing: 0.14em; padding: 6px 20px; text-align: center; background: rgba(40, 0, 8, 0.72); border: 2px solid var(--red); color: #fff; animation: pulse 0.22s infinite alternate; }
+.hud .alert { position: absolute; left: 50%; top: 40%; transform: translateX(-50%); font-family: var(--display); font-style: italic; font-size: clamp(16px, 3vh, 26px); letter-spacing: 0.14em; padding: 6px 20px; text-align: center; background: rgba(40, 0, 8, 0.72); border: 2px solid var(--red); color: #fff; animation: pulse 0.22s infinite alternate; }
 .hud .alert small { display: block; font-size: 0.55em; color: var(--yellow); letter-spacing: 0.2em; margin-top: 2px; }
-.hud .alert.lock { border-color: var(--orange); background: rgba(40, 20, 0, 0.6); color: var(--orange); font-size: clamp(12px, 2vh, 17px); animation: none; top: 33%; }
-.hud .msgs { top: 15%; }
-.count { flex-direction: column; gap: 2vh; }
+.hud .alert.lock { border-color: var(--orange); background: rgba(40, 20, 0, 0.6); color: var(--orange); font-size: clamp(12px, 2vh, 17px); animation: none; top: 42%; }
+.hud .msgs { top: 158px; }
+.hud .msgs .msg:nth-last-child(n+4) { display: none; }
+.count { flex-direction: column; gap: 2vh; justify-content: flex-start; padding-top: 16vh; }
 .count .brief { width: min(560px, 92vw); padding: 10px 16px; background: rgba(6, 4, 22, 0.78); border: 1px solid var(--line); border-radius: 4px; font-size: 12.5px; }
 .count .brief .bt { font-family: var(--display); color: var(--orange); letter-spacing: 0.1em; font-size: 14px; margin-bottom: 4px; }
 .count .brief .bd { color: var(--text); margin-bottom: 8px; line-height: 1.4; }
 .keys.compact { grid-template-columns: repeat(4, auto 1fr); gap: 4px 8px; font-size: 11.5px; }
+@media (max-height: 520px) { .keys.compact { grid-template-columns: repeat(3, auto 1fr); } }
 .keys.compact kbd { font-size: 10.5px; padding: 1px 6px; }
 .tiltbar { position: relative; height: 12px; border: 1px solid var(--line); margin: 4px 0 6px; background: linear-gradient(90deg, transparent 49.5%, var(--cyan) 49.5%, var(--cyan) 50.5%, transparent 50.5%); }
 .tiltbar i { position: absolute; top: -3px; width: 10px; height: 16px; margin-left: -5px; background: var(--orange); box-shadow: 0 0 8px var(--orange); }
@@ -299,8 +301,8 @@ kbd { font-family: var(--mono); font-size: 12px; padding: 2px 8px; border: 1px s
   .modal h2 { font-size: 20px; margin-bottom: 6px; }
   .bigpos { font-size: 40px; }
   .count .brief { font-size: 11px; padding: 6px 10px; }
-  .count span { font-size: clamp(44px, 20vh, 110px); }
-  .hud .alert { top: 24%; }
+  .count > span { font-size: clamp(44px, 20vh, 110px); }
+  .hud .alert { top: 44%; }
 }
 @media (max-width: 700px) {
   .keys.compact { grid-template-columns: repeat(2, auto 1fr); }

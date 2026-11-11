@@ -61,7 +61,9 @@ export function TopBar({ title, save, onBack }: { title: string; save: SaveData;
 
 export function ControlsGuide({ compact, touch }: { compact?: boolean; touch?: boolean }) {
   if (touch) {
-    const rows: [string, string][] = [
+    const rows: [string, string][] = compact ? [
+      ['PAD / TILT', 'Steer'], ['BRAKE', 'Slow down'], ['FIRE', 'Blasters'], ['BOOST', 'Boost / flares'], ['MSL', 'Missile'], ['ABILITY', 'Special'],
+    ] : [
       ['Left pad / tilt', 'Steer'], ['Auto', 'Accelerate (hold BRAKE to slow)'], ['FIRE', 'Blasters (hold)'],
       ['BOOST', 'Boost (hold). Tap it with a missile inbound: flares'], ['MSL', 'Missile'], ['ABILITY', 'Ship ability'],
     ];

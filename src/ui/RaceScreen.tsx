@@ -166,7 +166,7 @@ function Results({ result, nextUnlocked, next, onRestart, onNext, onExit }: { re
             <div className="line total"><span>Total</span><span>+{rw.totalCredits.toLocaleString()} ¢ &nbsp; <span style={{ color: 'var(--teal)' }}>+{rw.salvage} ⬢</span></span></div>
             {rw.unlockedNext
               ? <div className="unlock">{next ? (nextUnlocked ? `▲ NEXT RACE UNLOCKED: ${next.name.toUpperCase()}` : '✔ RACE CLEARED') : '★ CAMPAIGN COMPLETE — WARZONE ZERO CHAMPION ★'}</div>
-              : <div className="lockmsg">Finish {ordinal(race.unlockPos)} or better to unlock the next race. Spend your winnings on upgrades and try again.</div>}
+              : <div className="lockmsg">Finish {ordinal(race.unlockPos)} or better to unlock the next event. Spend your winnings on upgrades and try again.</div>}
             <div className="label" style={{ marginTop: 10 }}>Capital ship damage</div>
             {result.contributions.slice(0, 5).map((c) => (
               <div className="line" key={c.name}><span style={{ color: c.isPlayer ? 'var(--yellow)' : c.color }}>{c.name}</span><span>{c.damage} · {c.share.toFixed(0)}%{c.kills ? ` · ${c.kills}✖` : ''}</span></div>

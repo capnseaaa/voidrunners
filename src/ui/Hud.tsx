@@ -196,7 +196,7 @@ export function Hud({ game, showMinimap, touch }: { game: Game; showMinimap: boo
       </div>
 
       <div className="msgs">
-        {hud.messages.map((m) => <div key={m.id} className={`msg ${m.kind}`} style={{ opacity: m.t > 3.2 ? Math.max(0, (4 - m.t) / 0.8) : 1 }}>{m.text}</div>)}
+        {hud.messages.map((m) => <div key={m.id} className={`msg k-${m.kind}`} style={{ opacity: m.t > 3.2 ? Math.max(0, (4 - m.t) / 0.8) : 1 }}>{m.text}</div>)}
       </div>
 
       {racing && hud.dead <= 0 && hud.missileWarn > 0 && (

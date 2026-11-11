@@ -115,7 +115,7 @@ function buildRaces(): RaceDef[] {
         bombard: type === 'surface' ? (dying ? 7 : 4) : type === 'battle' ? 5 : theme === 'warzone' ? 3 : 0,
         dying: type === 'surface',
         seed: 1000 + (stage * 5 + slot) * 77 + (ev.key.length === 1 ? 31 : 0),
-        unlockPos: type === 'championship' ? 4 : 6,
+        unlockPos: type === 'championship' ? 4 : type === 'battle' ? 7 : 6,
         objectives,
       });
     });
